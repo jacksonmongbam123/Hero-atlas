@@ -686,6 +686,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                   const idsFromRel = extractValidStudentIds(matchingRels);
                   if (idsFromRel.length > 0) {
                     mappedStudentIds = idsFromRel;
+                    foundChildrenDetails = matchingRels.filter((r: any) => typeof r === "object" && r !== null);
                     break;
                   }
                 }
@@ -750,19 +751,20 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           studentID: "S205",
           student_id: "S205",
           id: "S205",
-          reg_no: "S205",
+          reg_no: "STU-1001",
           rollNo: "ROLL-ATH-1001",
-          name: "Ethan Carter",
-          first_name: "Ethan",
-          last_name: "Carter",
-          class_id: "Grade 11 - Advanced Mathematics",
-          class_name: "Grade 11 - Advanced Mathematics",
-          grade: "Grade 11 - Math",
+          name: "Vishal Dey",
+          student_name: "Vishal Dey",
+          first_name: "Vishal",
+          last_name: "Dey",
+          class_id: "Grade 11 - Science & Mathematics",
+          class_name: "Grade 11 - Science & Mathematics",
+          grade: "Grade 11 - Science",
           phone: "+1 (555) 019-2831",
           organization_id: user?.organization_id || "ATH-ORG-941",
           school_name: user?.school_name || "Hero Atlas Academy of Excellence",
-          academic_standing: "94.8% • Grade A+",
-          attendance_rate: "96%",
+          academic_standing: "96.5% • Grade A+",
+          attendance_rate: "98%",
           pending_fees: "$0.00"
         },
         {
@@ -770,29 +772,31 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           studentID: "S206",
           student_id: "S206",
           id: "S206",
-          reg_no: "S206",
+          reg_no: "STU-1002",
           rollNo: "ROLL-ATH-1002",
-          name: "Sophia Vance",
-          first_name: "Sophia",
-          last_name: "Vance",
+          name: "Ananya Dey",
+          student_name: "Ananya Dey",
+          first_name: "Ananya",
+          last_name: "Dey",
           class_id: "Grade 10 - Physical Science",
           class_name: "Grade 10 - Physical Science",
           grade: "Grade 10 - Science",
           phone: "+1 (555) 019-2832",
           organization_id: user?.organization_id || "ATH-ORG-941",
           school_name: user?.school_name || "Hero Atlas Academy of Excellence",
-          academic_standing: "91.2% • Grade A",
-          attendance_rate: "92%",
-          pending_fees: "$250.00"
+          academic_standing: "92.0% • Grade A",
+          attendance_rate: "94%",
+          pending_fees: "$150.00"
         },
         {
           _id: "S207",
           studentID: "S207",
           student_id: "S207",
           id: "S207",
-          reg_no: "S207",
+          reg_no: "STU-1003",
           rollNo: "ROLL-ATH-1003",
           name: "Lucas Miller",
+          student_name: "Lucas Miller",
           first_name: "Lucas",
           last_name: "Miller",
           class_id: "Grade 9 - English Literature",
