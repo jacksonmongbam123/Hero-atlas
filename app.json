@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "platforms": ["web", "android", "ios"],
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash-icon.png",
