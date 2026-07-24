@@ -1023,14 +1023,14 @@ async function startServer() {
 
     // Relational mapping table for parent -> student (rel_parent_students)
     const relParentStudentsTable = [
-      { _id: "rel-ps-1", parent_id: "p101", student_id: "S205", student_name: "Vishal Dey", name: "Vishal Dey", reg_no: "STU-1001", class_name: "Grade 11 - Science & Mathematics", academic_standing: "96.5% • Grade A+", attendance_rate: "98%", pending_fees: "$0.00" },
-      { _id: "rel-ps-2", parent_id: "p101", student_id: "S206", student_name: "Ananya Dey", name: "Ananya Dey", reg_no: "STU-1002", class_name: "Grade 10 - Physical Science", academic_standing: "92.0% • Grade A", attendance_rate: "94%", pending_fees: "$150.00" },
-      { _id: "rel-ps-3", parent_id: "p102", student_id: "S207", student_name: "Lucas Miller", name: "Lucas Miller", reg_no: "STU-1003", class_name: "Grade 9 - English Literature", academic_standing: "88.5% • Grade B+", attendance_rate: "94%", pending_fees: "$0.00" },
-      { _id: "rel-ps-4", parent_id: "parent1", student_id: "S205", student_name: "Vishal Dey", name: "Vishal Dey", reg_no: "STU-1001", class_name: "Grade 11 - Science & Mathematics", academic_standing: "96.5% • Grade A+", attendance_rate: "98%", pending_fees: "$0.00" },
-      { _id: "rel-ps-5", parent_id: "parent1", student_id: "S206", student_name: "Ananya Dey", name: "Ananya Dey", reg_no: "STU-1002", class_name: "Grade 10 - Physical Science", academic_standing: "92.0% • Grade A", attendance_rate: "94%", pending_fees: "$150.00" },
-      { _id: "rel-ps-6", parent_id: "parent2", student_id: "S207", student_name: "Lucas Miller", name: "Lucas Miller", reg_no: "STU-1003", class_name: "Grade 9 - English Literature", academic_standing: "88.5% • Grade B+", attendance_rate: "94%", pending_fees: "$0.00" },
-      { _id: "rel-ps-7", parent_id: "6a4d10100000000000000000", student_id: "S205", student_name: "Vishal Dey", name: "Vishal Dey", reg_no: "STU-1001", class_name: "Grade 11 - Science & Mathematics", academic_standing: "96.5% • Grade A+", attendance_rate: "98%", pending_fees: "$0.00" },
-      { _id: "rel-ps-8", parent_id: "6a4d10100000000000000000", student_id: "S206", student_name: "Ananya Dey", name: "Ananya Dey", reg_no: "STU-1002", class_name: "Grade 10 - Physical Science", academic_standing: "92.0% • Grade A", attendance_rate: "94%", pending_fees: "$150.00" }
+      { _id: "rel-ps-1", parent_id: "p101", student_id: "S205" },
+      { _id: "rel-ps-2", parent_id: "p101", student_id: "S206" },
+      { _id: "rel-ps-3", parent_id: "p102", student_id: "S207" },
+      { _id: "rel-ps-4", parent_id: "parent1", student_id: "S205" },
+      { _id: "rel-ps-5", parent_id: "parent1", student_id: "S206" },
+      { _id: "rel-ps-6", parent_id: "parent2", student_id: "S207" },
+      { _id: "rel-ps-7", parent_id: "6a4d10100000000000000000", student_id: "S205" },
+      { _id: "rel-ps-8", parent_id: "6a4d10100000000000000000", student_id: "S206" }
     ];
 
     if (!parentId) {
