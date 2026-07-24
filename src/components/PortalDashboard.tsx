@@ -601,6 +601,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
         const idsFromRelUser = extractValidStudentIds(matchingRels);
         if (idsFromRelUser.length > 0) {
           mappedStudentIds = idsFromRelUser;
+          foundChildrenDetails = matchingRels.filter((r: any) => typeof r === "object" && r !== null);
         }
       }
 
@@ -621,6 +622,9 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
         const idsFromSingle = extractValidStudentIds(singleField);
         if (idsFromSingle.length > 0) {
           mappedStudentIds = idsFromSingle;
+          if (typeof singleField === "object" && singleField !== null) {
+            foundChildrenDetails = Array.isArray(singleField) ? singleField.filter((s: any) => typeof s === "object" && s !== null) : [singleField];
+          }
         }
       }
 
@@ -803,9 +807,19 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
         }
       ];
 
-      // Helper to derive clean human readable student name
-      const resolveStudentName = (child: any, idx: number): string => {
-        if (!child || typeof child !== "object") return `Student ${idx + 1}`;
+      // Helper to derive clean human readable student name without fake hardcoded defaults
+      const resolveStudentName = (child: any, idx: number, targetMappedId?: string): string => {
+        if (!child || typeof child !== "object") {
+          if (targetMappedId && !/^[0-9a-fA-F]{24}$/.test(targetMappedId)) {
+            return `Student (${targetMappedId})`;
+          }
+          return `Student ${idx + 1}`;
+        }
+
+        const nestedStudent = typeof child.student === "object" && child.student !== null ? child.student : {};
+        const nestedDetails = typeof child.student_details === "object" && child.student_details !== null ? child.student_details : {};
+        const nestedInfo = typeof child.student_info === "object" && child.student_info !== null ? child.student_info : {};
+        const nestedRel = typeof child.rel_student === "object" && child.rel_student !== null ? child.rel_student : {};
 
         const candidates = [
           child.student_name,
@@ -814,11 +828,26 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           child.fullName,
           child.display_name,
           child.displayName,
+          child.name,
+          child.child_name,
+          child.childName,
+          child.title,
           (child.first_name || child.firstName) && (child.last_name || child.lastName)
             ? `${child.first_name || child.firstName} ${child.last_name || child.lastName}`.trim()
             : "",
           child.first_name || child.firstName,
-          child.name
+          nestedStudent.student_name,
+          nestedStudent.studentName,
+          nestedStudent.full_name,
+          nestedStudent.fullName,
+          nestedStudent.name,
+          (nestedStudent.first_name || nestedStudent.firstName) && (nestedStudent.last_name || nestedStudent.lastName)
+            ? `${nestedStudent.first_name || nestedStudent.firstName} ${nestedStudent.last_name || nestedStudent.lastName}`.trim()
+            : "",
+          nestedStudent.first_name || nestedStudent.firstName,
+          nestedDetails.name || nestedDetails.student_name || nestedDetails.full_name,
+          nestedInfo.name || nestedInfo.student_name || nestedInfo.full_name,
+          nestedRel.name || nestedRel.student_name || nestedRel.full_name
         ];
 
         for (const cand of candidates) {
@@ -844,7 +873,9 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
             user.child_full_name,
             (user.child_first_name || user.childFirstName) && (user.child_last_name || user.childLastName)
               ? `${user.child_first_name || user.childFirstName} ${user.child_last_name || user.childLastName}`.trim()
-              : ""
+              : "",
+            user.child?.name,
+            user.student?.name
           ];
           for (const pc of parentCandidates) {
             if (pc && typeof pc === "string") {
@@ -856,14 +887,24 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           }
         }
 
-        // Fallback friendly human names
-        const presetNames = ["Ethan Carter", "Sophia Vance", "Lucas Miller", "Alexander Wright", "Olivia Chen"];
-        return presetNames[idx % presetNames.length];
+        // Fallback to student reg_no / roll_no / student_id if available
+        const regNoCandidate = child.reg_no || child.rollNo || child.roll_no || child.student_reg_no || child.username || targetMappedId;
+        if (regNoCandidate && typeof regNoCandidate === "string") {
+          const trimmed = regNoCandidate.trim();
+          if (trimmed && !/^[0-9a-fA-F]{24}$/.test(trimmed) && trimmed !== "undefined" && trimmed !== "null") {
+            return `Student (${trimmed})`;
+          }
+          if (/^[0-9a-fA-F]{24}$/.test(trimmed)) {
+            return `Student (STU-${trimmed.slice(-6).toUpperCase()})`;
+          }
+        }
+
+        return `Student ${idx + 1}`;
       };
 
       // Helper to derive clean readable student registration/roll number
       const resolveStudentRegNo = (child: any, defaultId: string): string => {
-        const candidate = child.reg_no || child.rollNo || child.roll_no || child.student_reg_no || child.username;
+        const candidate = child.reg_no || child.rollNo || child.roll_no || child.student_reg_no || child.username || child.student?.reg_no;
         if (candidate && typeof candidate === "string" && !/^[0-9a-fA-F]{24}$/.test(candidate.trim())) {
           return candidate.trim();
         }
@@ -925,7 +966,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       // Normalize final list
       const normalized = finalChildrenList.map((child: any, idx: number) => {
         const id = child._id || child.id || child.studentID || child.student_id || child.reg_no || `child-${idx}`;
-        const name = resolveStudentName(child, idx);
+        const name = resolveStudentName(child, idx, String(id));
         const regNo = resolveStudentRegNo(child, String(id));
         const className = child.class_name || child.class_id || child.grade || "Grade 11 - Advanced Mathematics";
         return {
