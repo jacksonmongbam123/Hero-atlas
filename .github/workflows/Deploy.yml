@@ -40,7 +40,7 @@ jobs:
         run: |
           node -e "
             const fs = require('fs');
-            const candidates = ['./App.native.tsx', './App.native.js', './src/App.native.tsx', './src/App.native.js', './App.js', './App.tsx', './app.js', './app.tsx', './src/App.js', './src/App.tsx'];
+            const candidates = ['./App.js', './App.tsx', './app.js', './app.tsx', './src/App.js', './src/App.tsx'];
             let foundTarget = './App';
             
             for (const file of candidates) {
