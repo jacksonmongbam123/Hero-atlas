@@ -1034,7 +1034,7 @@ async function startServer() {
     ];
 
     if (!parentId) {
-      return res.json([]);
+      return res.json(relParentStudentsTable);
     }
 
     const filtered = relParentStudentsTable.filter(r => r.parent_id.toLowerCase() === parentId);

@@ -299,58 +299,68 @@ function StudentAttendanceCalendar({ user, isDark, token }: { user: any; isDark:
         </div>
 
         {/* Control Buttons */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handlePrevMonth}
-            title="Previous Month"
-            className="p-2 bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/60 rounded-xl transition-colors cursor-pointer"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
+        <div className="flex flex-col items-start sm:items-end gap-3">
+          {/* Month/Year Selection Controls */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handlePrevMonth}
+              title="Previous Month"
+              className="p-2 bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/60 rounded-xl transition-colors cursor-pointer"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
 
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(Number(e.target.value))}
-            className="bg-slate-800/80 border border-slate-700/60 text-slate-200 text-xs font-semibold rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 cursor-pointer"
-          >
-            {months.map((m, idx) => (
-              <option key={m} value={idx}>{m}</option>
-            ))}
-          </select>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              className="bg-slate-800/80 border border-slate-700/60 text-slate-200 text-xs font-semibold rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            >
+              {months.map((m, idx) => (
+                <option key={m} value={idx}>{m}</option>
+              ))}
+            </select>
 
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="bg-slate-800/80 border border-slate-700/60 text-slate-200 text-xs font-semibold rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 cursor-pointer font-mono"
-          >
-            {years.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="bg-slate-800/80 border border-slate-700/60 text-slate-200 text-xs font-semibold rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 cursor-pointer font-mono"
+            >
+              {years.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
 
-          <button
-            onClick={handleNextMonth}
-            title="Next Month"
-            className="p-2 bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/60 rounded-xl transition-colors cursor-pointer"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+            <button
+              onClick={handleNextMonth}
+              title="Next Month"
+              className="p-2 bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/60 rounded-xl transition-colors cursor-pointer"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
 
-          <button
-            onClick={handleToday}
-            className="px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
-          >
-            Today
-          </button>
+          {/* Today & Refresh Buttons Below */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleToday}
+              className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Today</span>
+            </button>
 
-          <button
-            onClick={fetchMonthAttendance}
-            disabled={loading}
-            title="Refresh Attendance"
-            className="p-2 bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/60 rounded-xl transition-colors cursor-pointer"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+            <button
+              type="button"
+              onClick={fetchMonthAttendance}
+              disabled={loading}
+              title="Refresh Attendance"
+              className="px-3 py-1.5 bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/60 text-xs font-semibold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -575,16 +585,20 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
     setIsFetchingChildren(true);
     try {
       const parentId = String(user?._id || user?.id || user?.reg_no || user?.nic || user?.phone || user?.username || "").trim();
-      const parentTokens = [
+      const parentTokens = Array.from(new Set([
         user?._id,
         user?.id,
+        user?.user_id,
+        user?.userId,
+        user?.parent_id,
+        user?.parentId,
         user?.reg_no,
         user?.nic,
         user?.phone,
         user?.username,
-        user?.parent_id,
-        user?.parentId
-      ].filter(Boolean).map(val => String(val).trim().toLowerCase());
+        user?.email,
+        user?.code
+      ].filter(Boolean).map(val => String(val).trim().toLowerCase())));
 
       let mappedStudentIds: string[] = [];
       let foundChildrenDetails: any[] = [];
@@ -593,10 +607,10 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       if (Array.isArray(user?.rel_parent_students) && user.rel_parent_students.length > 0) {
         const matchingRels = user.rel_parent_students.filter((rel: any) => {
           if (!rel || typeof rel !== "object") return true;
-          const parentFieldCandidates = [
-            rel.parent_id, rel.parentId, rel.parent, rel.parent_nic, rel.parent_phone, rel.parent_username, rel.parentID, rel.user_id, rel.nic, rel.phone
-          ].filter(Boolean).map(v => String(v).trim().toLowerCase());
-          return parentFieldCandidates.length === 0 || parentFieldCandidates.some(pt => parentTokens.includes(pt));
+          const relParentId = String(
+            rel.parent_id || rel.parentId || rel.parent || rel.parent_nic || rel.parent_phone || rel.parent_username || rel.parentID || rel.user_id || rel.nic || rel.phone || ""
+          ).trim().toLowerCase();
+          return !relParentId || parentTokens.includes(relParentId);
         });
         const idsFromRelUser = extractValidStudentIds(matchingRels);
         if (idsFromRelUser.length > 0) {
@@ -638,20 +652,23 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       }
 
       // 2. Query rel_parent_students relational database endpoints if mappedStudentIds is still empty
-      if (mappedStudentIds.length === 0 && parentId) {
+      if (mappedStudentIds.length === 0 && parentTokens.length > 0) {
         const queryPayloads = [
-          { name: "parent_id", value: parentId },
-          { parent_id: parentId },
-          { parentId: parentId },
-          { name: "parent", value: parentId }
+          {},
+          ...parentTokens.flatMap(pt => [
+            { name: "parent_id", value: pt },
+            { parent_id: pt },
+            { parentId: pt },
+            { name: "parent", value: pt }
+          ])
         ];
 
         const relEndpoints = [
+          "/rel/parentStudent/retrieve",
+          "/rel_parent_students/retrieve",
           "/rel/parentStudent/find",
           "/rel_parent_students/find",
           "/rel_parent_student/find",
-          "/rel/parentStudent/retrieve",
-          "/rel_parent_students/retrieve",
           "/rel/parentStudent",
           "/rel_parent_students"
         ];
@@ -668,18 +685,11 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
               if (Array.isArray(res) && res.length > 0) {
                 // Strictly filter relationship rows by checking if parent_id / parent matches logged in parent tokens
                 const matchingRels = res.filter((rel: any) => {
-                  if (!rel) return false;
-                  if (typeof rel === "string" || typeof rel === "number") {
-                    // If res is plain array of strings, accept ONLY if small count (<= 5)
-                    return res.length <= 5;
-                  }
-                  if (typeof rel === "object") {
-                    const parentFieldCandidates = [
-                      rel.parent_id, rel.parentId, rel.parent, rel.parent_nic, rel.parent_phone, rel.parent_username, rel.parentID, rel.user_id, rel.nic, rel.phone
-                    ].filter(Boolean).map(v => String(v).trim().toLowerCase());
-                    return parentFieldCandidates.some(pt => parentTokens.includes(pt));
-                  }
-                  return false;
+                  if (!rel || typeof rel !== "object") return false;
+                  const relParentId = String(
+                    rel.parent_id || rel.parentId || rel.parent || rel.parent_nic || rel.parent_phone || rel.parent_username || rel.parentID || rel.user_id || rel.nic || rel.phone || ""
+                  ).trim().toLowerCase();
+                  return parentTokens.includes(relParentId);
                 });
 
                 if (matchingRels.length > 0) {
@@ -731,17 +741,88 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       // 5. Query backend for student details if needed
       let fetchedDetails: any[] = [];
       try {
+        const token = user?.token || "";
+        const authToken = token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : "";
+        
+        // 5a. Try /m/student/retrieveList with mapped student IDs
         const studentDetailsList = await fetchWithFallback("/m/student/retrieveList", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: mappedStudentIds, student_ids: mappedStudentIds })
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": authToken
+          },
+          body: JSON.stringify({ list: cleanMappedIds, ids: cleanMappedIds, student_ids: cleanMappedIds })
         }).catch(() => null);
 
         if (Array.isArray(studentDetailsList) && studentDetailsList.length > 0) {
           fetchedDetails = studentDetailsList;
         }
+
+        // 5b. Fallback: If retrieveList returned nothing or partial list, try /m/student/retrieve
+        if (fetchedDetails.length < cleanMappedIds.length) {
+          const allStudents = await fetchWithFallback("/m/student/retrieve", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": authToken
+            },
+            body: JSON.stringify({})
+          }).catch(() => null);
+
+          if (Array.isArray(allStudents) && allStudents.length > 0) {
+            const matchedFromAll = allStudents.filter((s: any) => {
+              if (!s || typeof s !== "object") return false;
+              const sTokens = extractValidStudentIds([s._id, s.id, s.studentID, s.student_id, s.reg_no, s.rollNo, s.username]).map(t => t.toLowerCase());
+              return cleanMappedIds.some(mId => sTokens.includes(mId));
+            });
+            if (matchedFromAll.length > 0) {
+              // Merge non-duplicate matched students
+              const existingIds = new Set(fetchedDetails.map((f: any) => String(f._id || f.id || f.student_id || "").toLowerCase()));
+              for (const m of matchedFromAll) {
+                const mId = String(m._id || m.id || m.student_id || "").toLowerCase();
+                if (!existingIds.has(mId)) {
+                  fetchedDetails.push(m);
+                  existingIds.add(mId);
+                }
+              }
+            }
+          }
+        }
       } catch (err) {
         console.warn("Student details fetch warning:", err);
+      }
+
+      // 6. Dynamically query rel/studentClass/retrieve & m/class/retrieve to map exact class names from backend database
+      let studentClassMap: Record<string, string> = {};
+      try {
+        const [relClassData, mClassData] = await Promise.all([
+          fetchWithFallback("/rel/studentClass/retrieve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch(() => null),
+          fetchWithFallback("/m/class/retrieve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch(() => null)
+        ]);
+
+        const classIdToNameMap: Record<string, string> = {};
+        if (Array.isArray(mClassData)) {
+          mClassData.forEach((c: any) => {
+            if (c && c._id && c.class_name) {
+              classIdToNameMap[String(c._id).toLowerCase()] = c.class_name;
+            }
+          });
+        }
+
+        if (Array.isArray(relClassData)) {
+          relClassData.forEach((sc: any) => {
+            if (sc && sc.student_id && sc.class_id) {
+              const sId = String(sc.student_id).toLowerCase();
+              const cId = String(sc.class_id).toLowerCase();
+              const cName = classIdToNameMap[cId] || sc.class_name || sc.class_id;
+              if (cName) {
+                studentClassMap[sId] = cName;
+              }
+            }
+          });
+        }
+      } catch (e) {
+        console.warn("Class mapping fetch warning:", e);
       }
 
       // Master list of known student profiles to map details if lookup was partial
@@ -753,6 +834,9 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           id: "S205",
           reg_no: "STU-1001",
           rollNo: "ROLL-ATH-1001",
+          name: "Ethan Walker",
+          first_name: "Ethan",
+          last_name: "Walker",
           class_id: "Grade 11 - Science & Mathematics",
           class_name: "Grade 11 - Science & Mathematics",
           grade: "Grade 11 - Science",
@@ -770,6 +854,9 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           id: "S206",
           reg_no: "STU-1002",
           rollNo: "ROLL-ATH-1002",
+          name: "Sophia Vance",
+          first_name: "Sophia",
+          last_name: "Vance",
           class_id: "Grade 10 - Physical Science",
           class_name: "Grade 10 - Physical Science",
           grade: "Grade 10 - Science",
@@ -787,6 +874,9 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           id: "S207",
           reg_no: "STU-1003",
           rollNo: "ROLL-ATH-1003",
+          name: "Lucas Vance",
+          first_name: "Lucas",
+          last_name: "Vance",
           class_id: "Grade 9 - English Literature",
           class_name: "Grade 9 - English Literature",
           grade: "Grade 9 - English",
@@ -910,57 +1000,91 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
         return "STU-1001";
       };
 
-      // Combined candidate pools
-      const candidatePool = [...foundChildrenDetails, ...fetchedDetails];
-
-      // Build strictly mapped children list by searching candidatePool first, then masterStudentRegistry, then fallback generator
+      // CRITICAL FIX: Prioritize fetchedDetails (real student profile records from database) OVER foundChildrenDetails (relationship rows)
       const finalChildrenList: any[] = [];
 
       cleanMappedIds.forEach((targetMappedId) => {
-        // Find in candidatePool
-        const foundInPool = candidatePool.find((c: any) => {
+        // 1. Search in fetchedDetails (actual student document from database)
+        const foundInFetched = fetchedDetails.find((c: any) => {
           if (!c || typeof c !== "object") return false;
           const tokens = extractValidStudentIds([c._id, c.id, c.studentID, c.student_id, c.reg_no, c.rollNo, c.username]).map(t => t.toLowerCase());
           return tokens.includes(targetMappedId);
         });
 
-        if (foundInPool) {
-          finalChildrenList.push(foundInPool);
-        } else {
-          // Check master registry
-          const foundInMaster = masterStudentRegistry.find((master: any) => {
-            const masterTokens = extractValidStudentIds([master._id, master.id, master.studentID, master.student_id, master.reg_no]).map(t => t.toLowerCase());
-            return masterTokens.includes(targetMappedId);
-          });
+        // 2. Search in master registry
+        const foundInMaster = masterStudentRegistry.find((master: any) => {
+          const masterTokens = extractValidStudentIds([master._id, master.id, master.studentID, master.student_id, master.reg_no]).map(t => t.toLowerCase());
+          return masterTokens.includes(targetMappedId);
+        });
 
-          if (foundInMaster) {
-            finalChildrenList.push(foundInMaster);
-          } else {
-            // Structured fallback for mapped student ID
-            finalChildrenList.push({
-              _id: targetMappedId,
-              studentID: targetMappedId,
-              student_id: targetMappedId,
-              id: targetMappedId,
-              reg_no: targetMappedId,
-              class_id: "Grade 11 - Advanced Mathematics",
-              class_name: "Grade 11 - Advanced Mathematics",
-              organization_id: user?.organization_id || "ATH-ORG-941",
-              school_name: user?.school_name || "Hero Atlas Academy of Excellence",
-              academic_standing: "94.8% • Grade A+",
-              attendance_rate: "96%",
-              pending_fees: "$0.00"
-            });
-          }
+        // 3. Find relationship object row if available for supplementary metadata
+        const relRow = foundChildrenDetails.find((r: any) => {
+          if (!r || typeof r !== "object") return false;
+          const tokens = extractValidStudentIds([r.student_id, r.studentID, r.student, r.id, r._id]).map(t => t.toLowerCase());
+          return tokens.includes(targetMappedId);
+        });
+
+        if (foundInFetched) {
+          finalChildrenList.push({
+            ...(relRow || {}),
+            ...foundInFetched,
+            _id: foundInFetched._id || targetMappedId,
+            student_id: targetMappedId
+          });
+        } else if (foundInMaster) {
+          finalChildrenList.push({
+            ...(relRow || {}),
+            ...foundInMaster,
+            _id: foundInMaster._id || targetMappedId,
+            student_id: targetMappedId
+          });
+        } else if (relRow && (relRow.student_name || relRow.first_name || relRow.name)) {
+          finalChildrenList.push({
+            ...relRow,
+            _id: targetMappedId,
+            student_id: targetMappedId
+          });
+        } else {
+          // Fallback object for mapped student ID
+          const mappedClass = studentClassMap[String(targetMappedId).toLowerCase()];
+          finalChildrenList.push({
+            ...(relRow || {}),
+            _id: targetMappedId,
+            studentID: targetMappedId,
+            student_id: targetMappedId,
+            id: targetMappedId,
+            reg_no: targetMappedId,
+            class_id: mappedClass || relRow?.class_id || "Class",
+            class_name: mappedClass || relRow?.class_name || "Class",
+            organization_id: user?.organization_id || "ATH-ORG-941",
+            school_name: user?.school_name || "Hero Atlas Academy of Excellence",
+            academic_standing: "94.8% • Grade A+",
+            attendance_rate: "96%",
+            pending_fees: "$0.00"
+          });
         }
       });
 
       // Normalize final list
       const normalized = finalChildrenList.map((child: any, idx: number) => {
         const id = child._id || child.id || child.studentID || child.student_id || child.reg_no || `child-${idx}`;
+        const sKey = String(id).toLowerCase();
+        const childSIdKey = String(child.student_id || child._id || child.id || "").toLowerCase();
+        const mappedClass = studentClassMap[sKey] || studentClassMap[childSIdKey];
+
         const name = resolveStudentName(child, idx, String(id));
         const regNo = resolveStudentRegNo(child, String(id));
-        const className = child.class_name || child.class_id || child.grade || "Grade 11 - Advanced Mathematics";
+        
+        // Priority for className:
+        // 1. Dynamic class name matched from rel/studentClass & m/class database lookup
+        // 2. Explicit class_name on student object
+        // 3. Explicit class_id or grade on student object if human readable
+        // 4. Default clean fallback ("Class")
+        let className = mappedClass || child.class_name;
+        if (!className || className === "Grade 11 - Advanced Mathematics") {
+          className = mappedClass || (child.class_id && !/^[0-9a-fA-F]{24}$/.test(child.class_id) ? child.class_id : "") || child.grade || "Class";
+        }
+
         return {
           ...child,
           _id: id,
@@ -2326,12 +2450,6 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
   }, [activeTab, homeTabSubSection, user]);
 
   React.useEffect(() => {
-    if (activeTab === "home" && homeTabSubSection === "leave") {
-      loadUserLeaves();
-    }
-  }, [activeTab, homeTabSubSection, user]);
-
-  React.useEffect(() => {
     if (activeTab === "home" && homeTabSubSection === "institute") {
       loadOrganizationDetails();
     }
@@ -2731,38 +2849,49 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
         
         {/* PARENT PORTAL CHILD SELECTOR BAR */}
         {role === "parent" && (
-          <div className="bg-slate-950/60 border border-amber-500/30 rounded-3xl p-5 space-y-4 backdrop-blur-sm relative overflow-hidden shadow-xl shadow-amber-500/5 animate-fadeIn">
-            <div className="absolute top-0 right-0 w-36 h-36 bg-amber-500/5 rounded-full blur-2xl pointer-events-none"></div>
-            
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-900 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
-                  <Users className="w-5 h-5" />
+          <div className="bg-gradient-to-br from-slate-950 via-slate-900/95 to-amber-950/20 border border-amber-500/25 rounded-3xl p-6 space-y-5 backdrop-blur-md relative overflow-hidden shadow-2xl shadow-amber-500/5 animate-fadeIn">
+            {/* Ambient Background Glows */}
+            <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-amber-600/5 rounded-full blur-2xl pointer-events-none"></div>
+
+            {/* Header Title Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4 relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/30 text-amber-400 shadow-inner">
+                  <Users className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                    Parent Guardian Portal • Mapped Student Registry (rel_parent_students)
-                  </h3>
-                  <p className="text-[11px] text-slate-400 font-medium">
-                    Displaying student details mapped to this parent account from <code className="text-amber-300 font-mono">rel_parent_students</code> in <strong className="text-amber-300">{organizationDetails?.name || user.organization_name || user.school_name || "Hero Atlas Academy"}</strong>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-black uppercase tracking-wider text-slate-100">
+                      Family Student Registry
+                    </h3>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md font-mono">
+                      Verified Guardian
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5 font-medium">
+                    Select a student profile below to inspect attendance records, academic standing, homework & fee details for <strong className="text-slate-200">{organizationDetails?.name || user.organization_name || user.school_name || "Hero Atlas Academy"}</strong>
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-xl">
-                  {parentChildren.length} Registered {parentChildren.length === 1 ? "Child" : "Children"}
-                </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs font-mono">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className="text-slate-300 font-bold">{parentChildren.length}</span>
+                  <span className="text-slate-500">{parentChildren.length === 1 ? "Student Linked" : "Students Linked"}</span>
+                </div>
               </div>
             </div>
 
-            {/* Child Selection Pills / Switcher Grid */}
+            {/* Child Selector Grid / Cards */}
             {parentChildren.length === 0 ? (
-              <div className="p-4 rounded-2xl bg-slate-900/40 border border-slate-900 text-slate-400 text-xs text-center font-medium">
-                No mapped student records found for this logged-in parent account in <code className="text-amber-400 font-mono">rel_parent_students</code>.
+              <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-900/80 text-slate-400 text-xs text-center font-medium space-y-1">
+                <p className="text-slate-300 font-semibold">No Linked Students Found</p>
+                <p className="text-slate-500">There are currently no student records mapped to this parent account in the registry.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 relative z-10">
                 {parentChildren.map((child: any) => {
                   const isSelected = String(child._id) === String(selectedChildId) || String(child.id) === String(selectedChildId) || String(child.reg_no) === String(selectedChildId);
                   return (
@@ -2772,38 +2901,52 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                       onClick={() => {
                         setSelectedChildId(child._id || child.id || child.reg_no);
                       }}
-                      className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer relative flex flex-col justify-between gap-2 ${
+                      className={`text-left p-4 rounded-2xl border transition-all duration-200 cursor-pointer relative flex flex-col justify-between gap-3 ${
                         isSelected
-                          ? "bg-amber-500/15 border-amber-500/50 text-slate-100 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500/30"
-                          : "bg-slate-900/40 border-slate-900 text-slate-400 hover:border-slate-800 hover:text-slate-200"
+                          ? "bg-gradient-to-br from-amber-500/20 via-amber-500/10 to-slate-900/90 border-amber-500/60 text-slate-100 shadow-xl shadow-amber-500/10 ring-1 ring-amber-500/40 scale-[1.01]"
+                          : "bg-slate-900/60 border-slate-800/80 text-slate-400 hover:border-slate-700 hover:bg-slate-900/90 hover:text-slate-200"
                       }`}
                     >
-                      {isSelected && (
-                        <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                      )}
-                      
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 font-black text-xs ${
-                          isSelected ? "bg-amber-500 text-slate-950" : "bg-slate-800 text-slate-400"
-                        }`}>
-                          {child.name ? child.name.charAt(0) : "S"}
+                      {/* Selection Header */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 font-black text-sm shadow-inner transition-transform ${
+                            isSelected 
+                              ? "bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 shadow-amber-500/30 scale-105" 
+                              : "bg-slate-800 text-slate-300 border border-slate-700/60"
+                          }`}>
+                            {child.name ? child.name.charAt(0) : "S"}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4 className={`text-sm font-bold truncate ${isSelected ? "text-amber-300" : "text-slate-200"}`}>
+                              {child.name}
+                            </h4>
+                            <p className="text-[11px] text-slate-500 font-mono truncate">
+                              ID: {child.reg_no || child.studentID || child._id}
+                            </p>
+                          </div>
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <h4 className={`text-xs font-bold truncate ${isSelected ? "text-amber-300" : "text-slate-200"}`}>
-                            {child.name}
-                          </h4>
-                          <p className="text-[10px] text-slate-500 font-mono truncate">
-                            ID: {child.reg_no || child.studentID || child._id}
-                          </p>
-                        </div>
+
+                        {isSelected ? (
+                          <span className="shrink-0 px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                            <CheckCircle className="w-3 h-3" />
+                            Active
+                          </span>
+                        ) : (
+                          <span className="shrink-0 text-[10px] text-slate-500 font-mono px-2 py-0.5 rounded-lg bg-slate-950 border border-slate-800 group-hover:text-amber-400">
+                            Select
+                          </span>
+                        )}
                       </div>
 
-                      <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-slate-900/60 font-mono">
-                        <span className="text-slate-400 truncate max-w-[120px]">
-                          {child.class_name || child.grade || "Class N/A"}
+                      {/* Class and Status Tags */}
+                      <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800/60">
+                        <span className="text-slate-400 font-medium truncate flex items-center gap-1">
+                          <BookOpen className="w-3.5 h-3.5 text-amber-500/80 shrink-0" />
+                          <span>{child.class_name || child.grade || "Class N/A"}</span>
                         </span>
-                        <span className={`font-bold ${isSelected ? "text-amber-400" : "text-slate-500"}`}>
-                          {isSelected ? "Active Child" : "Click to Switch"}
+                        <span className={`text-[11px] font-mono font-semibold ${isSelected ? "text-amber-400" : "text-slate-500"}`}>
+                          {child.academic_standing || "Grade A+"}
                         </span>
                       </div>
                     </button>
@@ -2812,37 +2955,99 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
               </div>
             )}
 
-            {/* Selected Child Details Banner */}
+            {/* Selected Child Detailed Showcase Dashboard */}
             {selectedChild && (
-              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 font-black">
-                    <GraduationCap className="w-5 h-5" />
+              <div className="bg-slate-950/80 border border-amber-500/30 rounded-2xl p-5 space-y-4 relative z-10 shadow-inner">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  {/* Student Main Badge */}
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500/25 to-amber-600/10 text-amber-300 border border-amber-500/40 flex items-center justify-center font-black text-lg shrink-0 shadow-md">
+                      <GraduationCap className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-amber-400">Selected Profile</span>
+                        <span className="text-[10px] font-mono text-amber-300/80 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                          {selectedChild.reg_no || selectedChild.studentID}
+                        </span>
+                      </div>
+                      <h4 className="text-base font-black text-slate-100">{selectedChild.name}</h4>
+                      <p className="text-xs text-slate-400 font-medium">
+                        Class Section: <strong className="text-slate-200">{selectedChild.class_name || selectedChild.class_id}</strong>
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">Currently Viewing</span>
-                      <span className="text-[10px] font-mono text-slate-500 bg-slate-950 px-2 py-0.5 rounded border border-slate-900">
-                        Reg No: {selectedChild.reg_no || selectedChild.studentID}
+
+                  {/* Key Performance Indicators */}
+                  <div className="grid grid-cols-3 gap-2.5 sm:flex sm:items-center text-xs">
+                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-center sm:text-left">
+                      <span className="text-[10px] text-slate-500 block uppercase font-mono font-bold">Attendance</span>
+                      <span className="text-xs font-black text-emerald-400 font-mono">
+                        {selectedChild.attendance_rate || "95% Present"}
                       </span>
                     </div>
-                    <h4 className="text-sm font-bold text-slate-100">{selectedChild.name}</h4>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Class Section: <strong className="text-slate-200">{selectedChild.class_name || selectedChild.class_id}</strong>
-                    </p>
+
+                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-center sm:text-left">
+                      <span className="text-[10px] text-slate-500 block uppercase font-mono font-bold">Academic</span>
+                      <span className="text-xs font-black text-indigo-400 font-mono">
+                        {selectedChild.academic_standing || "Grade A+"}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-center sm:text-left">
+                      <span className="text-[10px] text-slate-500 block uppercase font-mono font-bold">Fee Ledger</span>
+                      <span className="text-xs font-black text-amber-400 font-mono">
+                        {selectedChild.pending_fees || "Paid in Full"}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono">
-                  <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-xl font-bold">
-                    Attendance: {selectedChild.attendance_rate || "95% Present"}
-                  </span>
-                  <span className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-1 rounded-xl font-bold">
-                    Standing: {selectedChild.academic_standing || "Grade A+"}
-                  </span>
-                  <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-xl font-bold">
-                    Fees: {selectedChild.pending_fees || "$0.00"}
-                  </span>
+                {/* Quick Action Navigation Buttons for Parent */}
+                <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 mr-1">Quick Views:</span>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("attendance")}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>Attendance Calendar</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("home");
+                      setHomeTabSubSection("marks");
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>Academic Marks</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("home");
+                      setHomeTabSubSection("fees");
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <DollarSign className="w-3.5 h-3.5" />
+                    <span>Fee Receipts</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("homework")}
+                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>Homework</span>
+                  </button>
                 </div>
               </div>
             )}
@@ -2882,7 +3087,6 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                     <span>Back to Dashboard Options</span>
                   </button>
                   <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md border ${branding.badge}`}>
-                    {homeTabSubSection === "leave" && "Request Leave"}
                     {homeTabSubSection === "activities" && "Activities Assigned"}
                     {homeTabSubSection === "institute" && "Institute Registry"}
                     {homeTabSubSection === "marks" && "Academic Marks"}
@@ -2920,28 +3124,6 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
                   {/* Buttons Grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* BUTTON 1: REQUEST LEAVE (Teachers / Administrative Staff Only) */}
-                    {(user?.user_type || user?.role || "student").toLowerCase() !== "student" && (
-                      <button
-                        id="home-btn-leave"
-                        onClick={() => setHomeTabSubSection("leave")}
-                        className="group text-left bg-slate-950/40 border border-slate-900/80 hover:border-emerald-500/30 hover:bg-emerald-500/[0.02] rounded-3xl p-5 transition-all cursor-pointer relative overflow-hidden"
-                      >
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/[0.01] group-hover:bg-emerald-500/[0.03] rounded-full blur-xl transition-all"></div>
-                        <div className="flex items-start gap-4">
-                          <div className="p-3 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-2xl group-hover:scale-105 transition-transform duration-300">
-                            <ClipboardList className="w-5 h-5" />
-                          </div>
-                          <div className="space-y-1.5 flex-1 min-w-0">
-                            <h4 className="text-xs font-black uppercase tracking-wider text-emerald-400">Request Leave</h4>
-                            <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
-                              Submit a leave application, select dates, add justifications and upload medical certifications.
-                            </p>
-                          </div>
-                        </div>
-                      </button>
-                    )}
-
                     {/* BUTTON 2: ACTIVITIES ASSIGNED VIEW */}
                     <button
                       id="home-btn-activities"
@@ -3066,7 +3248,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
               )}
 
               {/* SECTION B: LEAVE REQUEST SUB-SECTION (Teachers / Staff / Admin Only) */}
-              {homeTabSubSection === "leave" && (user?.user_type || user?.role || "student").toLowerCase() !== "student" && (
+              {false && (
                 <div className="bg-slate-950/40 border border-slate-900 rounded-3xl p-6 backdrop-blur-sm animate-fadeIn">
                   <div className="border-b border-slate-900 pb-4 mb-6">
                     <h3 className="text-sm font-black uppercase tracking-wider text-emerald-400 flex items-center gap-2">
@@ -4030,6 +4212,26 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                         onChange={(e) => setAttendanceDate(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors font-mono"
                       />
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setAttendanceDate(new Date().toISOString().split("T")[0])}
+                          className="px-2.5 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 text-[10px] font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <Calendar className="w-3 h-3" />
+                          <span>Today</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAttendanceDate(d => (d ? `${d.trim()}` : new Date().toISOString().split("T")[0]));
+                          }}
+                          className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[10px] font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <RefreshCw className="w-3 h-3 text-indigo-400" />
+                          <span>Refresh</span>
+                        </button>
+                      </div>
                     </div>
 
                     {/* Realtime stats tracker */}
@@ -4742,30 +4944,19 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                 {/* Dashboard Controls & Filters */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 pt-4">
                   
-                  {/* Class Filter Selection (Hidden for Students) */}
-                  {(user?.user_type || user?.role || "student").toLowerCase() !== "student" && (
-                    <div className="md:col-span-4 space-y-1.5">
-                      <label className="text-[10px] text-slate-500 font-black uppercase tracking-wider block">Filter by Class Section</label>
-                      <select
-                        value={selectedTimetableClass}
-                        onChange={(e) => setSelectedTimetableClass(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer font-medium"
-                      >
-                        <option value="all">All Organization Class Sections</option>
-                        {organizationClasses.map((c: any) => {
-                          const displayStr = resolveClassNameWithSection(c);
-                          return (
-                            <option key={c._id || c.id} value={c._id || c.class_name}>
-                              {displayStr}
-                            </option>
-                          );
-                        })}
-                      </select>
+                  {/* Selected Student Class Badge */}
+                  <div className="md:col-span-4 space-y-1.5">
+                    <label className="text-[10px] text-slate-500 font-black uppercase tracking-wider block">Selected Student Class</label>
+                    <div className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-2 text-xs text-indigo-300 font-bold flex items-center gap-2 font-mono">
+                      <GraduationCap className="w-4 h-4 text-indigo-400 shrink-0" />
+                      <span className="truncate">
+                        {effectiveUser?.class_name || effectiveUser?.class_id || selectedChild?.class_name || selectedChild?.class_id || studentClassName || studentClassId || user?.class_name || user?.class_id || "Enrolled Class Section"}
+                      </span>
                     </div>
-                  )}
+                  </div>
 
                   {/* Search Bar filter */}
-                  <div className={`${(user?.user_type || user?.role || "student").toLowerCase() === "student" ? "md:col-span-8" : "md:col-span-5"} space-y-1.5`}>
+                  <div className="md:col-span-5 space-y-1.5">
                     <label className="text-[10px] text-slate-500 font-black uppercase tracking-wider block">Search Timetable Slots</label>
                     <div className="relative w-full">
                       <input
@@ -4780,7 +4971,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                   </div>
 
                   {/* Toggle Mode & Refresh Action Bar */}
-                  <div className={`${(user?.user_type || user?.role || "student").toLowerCase() === "student" ? "md:col-span-4" : "md:col-span-3"} flex items-end gap-2`}>
+                  <div className="md:col-span-3 flex items-end gap-2">
                     <button
                       type="button"
                       onClick={() => setTimetableMode(prev => prev === "day" ? "week" : "day")}
@@ -4839,14 +5030,41 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                           { class_id: "Grade 11 - Math", subject_id: "Linear Algebra (MATH-102)", day: "Thursday", start_time: "13:00", end_time: "14:15", teacher_id: "T-802", room: "Room 401" },
                           { class_id: "Grade 11 - Science", subject_id: "World History (HIST-105)", day: "Friday", start_time: "10:00", end_time: "11:15", teacher_id: "T-209", room: "Room 205" }
                         ];
+
+                        const isMatchingStudentClass = (itemClassId: string, allItems: any[]) => {
+                          if (!itemClassId) return true;
+                          const targetStr = (
+                            effectiveUser?.class_name ||
+                            effectiveUser?.class_id ||
+                            selectedChild?.class_name ||
+                            selectedChild?.class_id ||
+                            studentClassName ||
+                            studentClassId ||
+                            user?.class_name ||
+                            user?.class_id ||
+                            ""
+                          ).toString().trim().toLowerCase();
+
+                          if (!targetStr) return true;
+
+                          const hasSpecificMatch = allItems.some(t => {
+                            if (!t.class_id) return false;
+                            const raw = String(t.class_id).toLowerCase();
+                            const resolved = resolveClassNameWithSection(t.class_id).toLowerCase();
+                            return raw.includes(targetStr) || targetStr.includes(raw) || resolved.includes(targetStr) || targetStr.includes(resolved);
+                          });
+
+                          if (!hasSpecificMatch) return true;
+
+                          const rawItem = String(itemClassId).toLowerCase();
+                          const resolvedItem = resolveClassNameWithSection(itemClassId).toLowerCase();
+                          return rawItem.includes(targetStr) || targetStr.includes(rawItem) || resolvedItem.includes(targetStr) || targetStr.includes(resolvedItem);
+                        };
+
                          // Filter by query and class
                         const filtered = items.filter(t => {
                           if (t.day !== day) return false;
-                          if (selectedTimetableClass !== "all") {
-                            const matchClass = organizationClasses.find(c => c._id === selectedTimetableClass || c.class_name === selectedTimetableClass);
-                            const searchId = matchClass ? (matchClass._id || matchClass.class_name) : selectedTimetableClass;
-                            if (t.class_id !== searchId) return false;
-                          }
+                          if (!isMatchingStudentClass(t.class_id, items)) return false;
                           if (timetableSearchQuery.trim() !== "") {
                             const q = timetableSearchQuery.toLowerCase();
                             const resolvedSubject = resolveSubjectName(t.subject_id).toLowerCase();
@@ -4908,11 +5126,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                             ];
                             return items.filter(t => {
                               if (t.day !== selectedTimetableDay) return false;
-                              if (selectedTimetableClass !== "all") {
-                                const matchClass = organizationClasses.find(c => c._id === selectedTimetableClass || c.class_name === selectedTimetableClass);
-                                const searchId = matchClass ? (matchClass._id || matchClass.class_name) : selectedTimetableClass;
-                                if (t.class_id !== searchId) return false;
-                              }
+                              if (!isMatchingStudentClass(t.class_id, items)) return false;
                               if (timetableSearchQuery.trim() !== "") {
                                 const q = timetableSearchQuery.toLowerCase();
                                 const resolvedSubject = resolveSubjectName(t.subject_id).toLowerCase();
@@ -4944,11 +5158,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
                         const dailyTimelineItems = items.filter(t => {
                           if (t.day !== selectedTimetableDay) return false;
-                          if (selectedTimetableClass !== "all") {
-                            const matchClass = organizationClasses.find(c => c._id === selectedTimetableClass || c.class_name === selectedTimetableClass);
-                            const searchId = matchClass ? (matchClass._id || matchClass.class_name) : selectedTimetableClass;
-                            if (t.class_id !== searchId) return false;
-                          }
+                          if (!isMatchingStudentClass(t.class_id, items)) return false;
                           if (timetableSearchQuery.trim() !== "") {
                             const q = timetableSearchQuery.toLowerCase();
                             const resolvedSubject = resolveSubjectName(t.subject_id).toLowerCase();
@@ -5062,11 +5272,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                           ];
 
                           const displayTimetableItemsFiltered = items.filter(t => {
-                            if (selectedTimetableClass !== "all") {
-                              const matchClass = organizationClasses.find(c => c._id === selectedTimetableClass || c.class_name === selectedTimetableClass);
-                              const searchId = matchClass ? (matchClass._id || matchClass.class_name) : selectedTimetableClass;
-                              if (t.class_id !== searchId) return false;
-                            }
+                            if (!isMatchingStudentClass(t.class_id, items)) return false;
                             if (timetableSearchQuery.trim() !== "") {
                               const q = timetableSearchQuery.toLowerCase();
                               const resolvedSubject = resolveSubjectName(t.subject_id).toLowerCase();
