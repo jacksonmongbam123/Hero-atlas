@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { StyleSheet, SafeAreaView, StatusBar, View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
 import { WebView } from "react-native-webview";
 
-const APP_URL = "https://hero-atlas-215905710206.asia-southeast1.run.app?platform=mobile";
+const APP_URL = "https://hero-atlas.onrender.com?platform=mobile";
 
 export default function App() {
   const [loading, setLoading] = useState(true);
