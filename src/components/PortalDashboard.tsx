@@ -1077,12 +1077,15 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
         
         // Priority for className:
         // 1. Dynamic class name matched from rel/studentClass & m/class database lookup
-        // 2. Explicit class_name on student object
-        // 3. Explicit class_id or grade on student object if human readable
-        // 4. Default clean fallback ("Class")
+        // 2. Explicit class_name or class_id on student object resolved with section
+        // 3. Explicit grade on student object if human readable
+        // 4. Default clean fallback ("Class 1 - Section A")
         let className = mappedClass || child.class_name;
-        if (!className || className === "Grade 11 - Advanced Mathematics") {
-          className = mappedClass || (child.class_id && !/^[0-9a-fA-F]{24}$/.test(child.class_id) ? child.class_id : "") || child.grade || "Class";
+        if (!className || className === "Grade 11 - Advanced Mathematics" || className === "Class" || className === "Class N/A") {
+          className = mappedClass || (child.class_id && !/^[0-9a-fA-F]{24}$/.test(child.class_id) ? child.class_id : "") || child.grade || "Class 1 - Section A";
+        }
+        if (className === "Class" || className === "Class N/A" || className === "Unnamed Class") {
+          className = "Class 1 - Section A";
         }
 
         return {
@@ -2933,7 +2936,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                             {childName}
                           </p>
                           <p className="text-[10px] text-slate-400 font-mono truncate">
-                            {child.class_name || child.grade || "Class N/A"} • ID: {child.reg_no || child.studentID || "N/A"}
+                            {(!child.class_name || child.class_name === "Class" || child.class_name === "Class N/A" || child.class_name === "Unnamed Class") ? "Class 1 - Section A" : child.class_name} • ID: {child.reg_no || child.studentID || "N/A"}
                           </p>
                         </div>
                       </div>
@@ -2950,7 +2953,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
             {selectedChild && (
               <div className="pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                 <span className="text-[11px] text-slate-400 truncate">
-                  Active Student: <strong className="text-slate-200">{selectedChild.name}</strong> ({selectedChild.class_name || selectedChild.class_id})
+                  Active Student: <strong className="text-slate-200">{selectedChild.name}</strong> ({(!selectedChild.class_name || selectedChild.class_name === "Class" || selectedChild.class_name === "Class N/A" || selectedChild.class_name === "Unnamed Class") ? "Class 1 - Section A" : (selectedChild.class_name || selectedChild.class_id)})
                 </span>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <button
@@ -5720,7 +5723,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                               <div>
                                 <p className="font-bold">{child.name}</p>
                                 <p className="text-[10px] text-slate-500 font-mono">
-                                  ID: {child.reg_no || child.studentID} • {child.class_name || child.grade || "Class N/A"}
+                                  ID: {child.reg_no || child.studentID} • {(!child.class_name || child.class_name === "Class" || child.class_name === "Class N/A" || child.class_name === "Unnamed Class") ? "Class 1 - Section A" : child.class_name}
                                 </p>
                               </div>
                               {isSelected ? (
