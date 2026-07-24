@@ -1140,6 +1140,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
   const effectiveUser = React.useMemo(() => {
     const roleStr = (user?.user_type || user?.role || "student").toLowerCase();
+    const parentOrgName = user?.organization_name || user?.school_name || user?.org_name || user?.organization || selectedChild?.organization_name || selectedChild?.school_name || selectedChild?.organization;
     if (roleStr === "parent" && selectedChild) {
       return {
         ...user,
@@ -1155,7 +1156,9 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
         class_name: selectedChild.class_name || selectedChild.class_id,
         rollNo: selectedChild.rollNo || selectedChild.reg_no,
         token: user?.token,
-        organization_id: user?.organization_id || selectedChild.organization_id,
+        organization_id: user?.organization_id || selectedChild?.organization_id || user?.school_id,
+        organization_name: parentOrgName,
+        school_name: user?.school_name || user?.organization_name || parentOrgName,
         parent_name: user?.name || user?.username || "Parent Guardian"
       };
     }
@@ -2219,7 +2222,8 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
     setOrganizationLoading(true);
     setOrganizationError(null);
     try {
-      const organizationId = user.organization_id || user.school_id || user.branch_id || "ATH-ORG-941";
+      const organizationId = user.organization_id || user.school_id || user.branch_id || selectedChild?.organization_id || "ATH-ORG-941";
+      const userOrgName = user.organization_name || user.school_name || user.org_name || user.organization || selectedChild?.organization_name || selectedChild?.school_name || selectedChild?.organization;
       let orgs: any[] = [];
       try {
         const remoteOrgs = await fetchWithFallback("/m/organization/retrieve", {
@@ -2250,13 +2254,34 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       }
 
       // Try finding the exact organization matching organizationId or key or name
-      const matched = orgs.find((o: any) => o.key === organizationId || o._id === organizationId || o.name === organizationId);
+      const matched = orgs.find((o: any) => 
+        o.key === organizationId || 
+        o._id === organizationId || 
+        o.name === organizationId ||
+        (userOrgName && (o.name?.toLowerCase() === userOrgName.toLowerCase() || o.key?.toLowerCase() === userOrgName.toLowerCase()))
+      );
+
       if (matched) {
-        setOrganizationDetails(matched);
+        setOrganizationDetails({
+          ...matched,
+          name: userOrgName || matched.name
+        });
+      } else if (userOrgName) {
+        setOrganizationDetails({
+          _id: organizationId,
+          name: userOrgName,
+          line1: "100 Academic Boulevard",
+          line2: "North Wing Campus",
+          line3: "Accredited Division",
+          city: "Metropolis",
+          postcode: "10001",
+          key: organizationId
+        });
       } else if (orgs.length > 0) {
         // Fallback to first available organization but override key to match user's current organization
         setOrganizationDetails({
           ...orgs[0],
+          name: orgs[0].name || "Hero Atlas Academy of Excellence",
           key: organizationId
         });
       } else {
@@ -2504,10 +2529,10 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
   }, [activeTab, homeTabSubSection, user]);
 
   React.useEffect(() => {
-    if (activeTab === "home" && homeTabSubSection === "institute") {
+    if (user) {
       loadOrganizationDetails();
     }
-  }, [activeTab, homeTabSubSection, user]);
+  }, [user, selectedChildId]);
 
   React.useEffect(() => {
     if (user) {
@@ -2906,11 +2931,16 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-md">
             {/* Header */}
             <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
                 <Users className="w-5 h-5 text-amber-400 shrink-0" />
-                <h3 className="text-sm font-bold text-slate-100">Family Student Registry</h3>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-slate-100">Family Student Registry</h3>
+                  <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                    Organization: <strong className="text-slate-200 font-semibold">{organizationDetails?.name || user?.organization_name || user?.school_name || selectedChild?.organization_name || selectedChild?.school_name || "Hero Atlas Academy of Excellence"}</strong>
+                  </p>
+                </div>
               </div>
-              <span className="text-[11px] font-mono text-slate-400 bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-lg">
+              <span className="text-[11px] font-mono text-slate-400 bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-lg shrink-0">
                 {parentChildren.length} {parentChildren.length === 1 ? "Student" : "Students"} Linked
               </span>
             </div>
