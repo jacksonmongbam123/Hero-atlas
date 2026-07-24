@@ -5641,10 +5641,10 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
       {/* Sticky Bottom Navigation Bar with Safe Area Inset Padding */}
       <div
-        className={`fixed bottom-0 left-0 right-0 z-50 backdrop-blur-md border-t px-4 shadow-2xl transition-all duration-200 ${
+        className={`fixed bottom-0 left-0 right-0 z-50 backdrop-blur-md px-4 transition-all duration-200 ${
           isDark
-            ? "bg-slate-950/95 border-slate-900/80 text-slate-300"
-            : "bg-white/95 border-slate-200/90 text-slate-700"
+            ? "bg-slate-950/95 text-slate-300"
+            : "bg-white/95 text-slate-700"
         } pt-2`}
         style={{
           paddingBottom: "max(1.5rem, calc(0.75rem + env(safe-area-inset-bottom, 24px)))"
