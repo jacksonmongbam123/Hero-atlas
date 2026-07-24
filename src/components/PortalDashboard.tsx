@@ -5632,25 +5632,38 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       </main>
 
       {/* Modern Compact Portal Footer with Padding for Navigation Bar */}
-      <footer className={`bg-slate-950/50 border-t border-slate-900/80 py-6 px-6 text-center text-xs text-slate-500 select-none mt-auto ${isMobileApp ? "pb-24" : "pb-28"}`}>
+      <footer className={`bg-slate-950/50 border-t border-slate-900/80 py-6 px-6 text-center text-xs text-slate-500 select-none mt-auto ${isMobileApp ? "pb-32" : "pb-36"}`}>
         <p className="font-bold">© 2026 Hero Atlas School Portal. All Rights Reserved.</p>
         <p className="text-[10px] text-slate-600 mt-1">
           Secured with JSON Web Token (JWT) Authorization • Connecting to Onrender Server API Gateway
         </p>
       </footer>
 
-      {/* Sticky Bottom Navigation Bar */}
-      <div className={`fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 backdrop-blur-md border-t border-slate-900/80 px-4 shadow-2xl ${isMobileApp ? "pt-1.5 pb-2.5" : "py-2.5"}`}>
+      {/* Sticky Bottom Navigation Bar with Safe Area Inset Padding */}
+      <div
+        className={`fixed bottom-0 left-0 right-0 z-50 backdrop-blur-md border-t px-4 shadow-2xl transition-all duration-200 ${
+          isDark
+            ? "bg-slate-950/95 border-slate-900/80 text-slate-300"
+            : "bg-white/95 border-slate-200/90 text-slate-700"
+        } pt-2`}
+        style={{
+          paddingBottom: "max(1.5rem, calc(0.75rem + env(safe-area-inset-bottom, 24px)))"
+        }}
+      >
         <div className="max-w-md mx-auto flex items-center justify-between gap-1">
           <button
             onClick={() => {
               setActiveTab("home");
               setHomeTabSubSection("menu");
             }}
-            className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center gap-1 flex-1 py-1.5 px-1 rounded-xl transition-all cursor-pointer ${
               activeTab === "home"
-                ? "text-indigo-400 bg-indigo-500/10 font-bold"
-                : "text-slate-400 hover:text-slate-200"
+                ? isDark
+                  ? "text-indigo-400 bg-indigo-500/10 font-bold"
+                  : "text-indigo-600 bg-indigo-50 font-bold"
+                : isDark
+                ? "text-slate-400 hover:text-slate-200"
+                : "text-slate-500 hover:text-slate-900"
             }`}
           >
             <Home className="w-5 h-5" />
@@ -5659,10 +5672,14 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           
           <button
             onClick={() => setActiveTab("attendance")}
-            className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center gap-1 flex-1 py-1.5 px-1 rounded-xl transition-all cursor-pointer ${
               activeTab === "attendance"
-                ? "text-emerald-400 bg-emerald-500/10 font-bold"
-                : "text-slate-400 hover:text-slate-200"
+                ? isDark
+                  ? "text-emerald-400 bg-emerald-500/10 font-bold"
+                  : "text-emerald-600 bg-emerald-50 font-bold"
+                : isDark
+                ? "text-slate-400 hover:text-slate-200"
+                : "text-slate-500 hover:text-slate-900"
             }`}
           >
             <UserCheck className="w-5 h-5" />
@@ -5671,10 +5688,14 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
           <button
             onClick={() => setActiveTab("homework")}
-            className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center gap-1 flex-1 py-1.5 px-1 rounded-xl transition-all cursor-pointer ${
               activeTab === "homework"
-                ? "text-amber-400 bg-amber-500/10 font-bold"
-                : "text-slate-400 hover:text-slate-200"
+                ? isDark
+                  ? "text-amber-400 bg-amber-500/10 font-bold"
+                  : "text-amber-600 bg-amber-50 font-bold"
+                : isDark
+                ? "text-slate-400 hover:text-slate-200"
+                : "text-slate-500 hover:text-slate-900"
             }`}
           >
             <BookOpen className="w-5 h-5" />
@@ -5683,10 +5704,14 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           
           <button
             onClick={() => setActiveTab("schedule")}
-            className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center gap-1 flex-1 py-1.5 px-1 rounded-xl transition-all cursor-pointer ${
               activeTab === "schedule"
-                ? "text-indigo-400 bg-indigo-500/10 font-bold"
-                : "text-slate-400 hover:text-slate-200"
+                ? isDark
+                  ? "text-indigo-400 bg-indigo-500/10 font-bold"
+                  : "text-indigo-600 bg-indigo-50 font-bold"
+                : isDark
+                ? "text-slate-400 hover:text-slate-200"
+                : "text-slate-500 hover:text-slate-900"
             }`}
           >
             <Clock className="w-5 h-5" />
@@ -5695,10 +5720,14 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           
           <button
             onClick={() => setActiveTab("timetable")}
-            className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center gap-1 flex-1 py-1.5 px-1 rounded-xl transition-all cursor-pointer ${
               activeTab === "timetable"
-                ? "text-indigo-400 bg-indigo-500/10 font-bold"
-                : "text-slate-400 hover:text-slate-200"
+                ? isDark
+                  ? "text-indigo-400 bg-indigo-500/10 font-bold"
+                  : "text-indigo-600 bg-indigo-50 font-bold"
+                : isDark
+                ? "text-slate-400 hover:text-slate-200"
+                : "text-slate-500 hover:text-slate-900"
             }`}
           >
             <CalendarRange className="w-5 h-5" />
