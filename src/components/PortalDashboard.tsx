@@ -1274,6 +1274,46 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
     return `${className} - Section ${trimmedSec}`;
   };
 
+  // Helper to match timetable items for the currently selected student/child class
+  const isMatchingStudentClass = (itemClassId: string, allItems: any[]) => {
+    if (!itemClassId) return true;
+
+    // Non-student / non-parent roles (like teachers, admins) see all classes
+    const roleStr = (user?.user_type || user?.role || "student").toLowerCase();
+    if (roleStr !== "student" && roleStr !== "parent") {
+      return true;
+    }
+
+    const targetStr = (
+      effectiveUser?.class_name ||
+      effectiveUser?.class_id ||
+      selectedChild?.class_name ||
+      selectedChild?.class_id ||
+      studentClassName ||
+      studentClassId ||
+      user?.class_name ||
+      user?.class_id ||
+      ""
+    ).toString().trim().toLowerCase();
+
+    if (!targetStr) return true;
+
+    // Check if any item in allItems explicitly matches targetStr
+    const hasSpecificMatch = allItems.some(t => {
+      if (!t.class_id) return false;
+      const raw = String(t.class_id).toLowerCase();
+      const resolved = resolveClassNameWithSection(t.class_id).toLowerCase();
+      return raw.includes(targetStr) || targetStr.includes(raw) || resolved.includes(targetStr) || targetStr.includes(resolved);
+    });
+
+    // Fallback: if no item matches targetStr directly, don't hide everything (prevents blank screen)
+    if (!hasSpecificMatch) return true;
+
+    const rawItem = String(itemClassId).toLowerCase();
+    const resolvedItem = resolveClassNameWithSection(itemClassId).toLowerCase();
+    return rawItem.includes(targetStr) || targetStr.includes(rawItem) || resolvedItem.includes(targetStr) || targetStr.includes(resolvedItem);
+  };
+
   // Teacher Attendance states
   const [teacherClasses, setTeacherClasses] = useState<Array<{ id: string; name: string; code: string; organization_id: string; teacher_id: string }>>([]);
   const [selectedTeacherClassId, setSelectedTeacherClassId] = useState("");
@@ -5031,37 +5071,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                           { class_id: "Grade 11 - Science", subject_id: "World History (HIST-105)", day: "Friday", start_time: "10:00", end_time: "11:15", teacher_id: "T-209", room: "Room 205" }
                         ];
 
-                        const isMatchingStudentClass = (itemClassId: string, allItems: any[]) => {
-                          if (!itemClassId) return true;
-                          const targetStr = (
-                            effectiveUser?.class_name ||
-                            effectiveUser?.class_id ||
-                            selectedChild?.class_name ||
-                            selectedChild?.class_id ||
-                            studentClassName ||
-                            studentClassId ||
-                            user?.class_name ||
-                            user?.class_id ||
-                            ""
-                          ).toString().trim().toLowerCase();
-
-                          if (!targetStr) return true;
-
-                          const hasSpecificMatch = allItems.some(t => {
-                            if (!t.class_id) return false;
-                            const raw = String(t.class_id).toLowerCase();
-                            const resolved = resolveClassNameWithSection(t.class_id).toLowerCase();
-                            return raw.includes(targetStr) || targetStr.includes(raw) || resolved.includes(targetStr) || targetStr.includes(resolved);
-                          });
-
-                          if (!hasSpecificMatch) return true;
-
-                          const rawItem = String(itemClassId).toLowerCase();
-                          const resolvedItem = resolveClassNameWithSection(itemClassId).toLowerCase();
-                          return rawItem.includes(targetStr) || targetStr.includes(rawItem) || resolvedItem.includes(targetStr) || targetStr.includes(resolvedItem);
-                        };
-
-                         // Filter by query and class
+                        // Filter by query and class
                         const filtered = items.filter(t => {
                           if (t.day !== day) return false;
                           if (!isMatchingStudentClass(t.class_id, items)) return false;
