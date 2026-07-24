@@ -2889,51 +2889,54 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
         
         {/* PARENT PORTAL CHILD SELECTOR BAR */}
         {role === "parent" && (
-          <div className="bg-gradient-to-br from-slate-950 via-slate-900/95 to-amber-950/20 border border-amber-500/25 rounded-3xl p-6 space-y-5 backdrop-blur-md relative overflow-hidden shadow-2xl shadow-amber-500/5 animate-fadeIn">
-            {/* Ambient Background Glows */}
-            <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
-            <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-amber-600/5 rounded-full blur-2xl pointer-events-none"></div>
+          <div className="bg-slate-950/90 border border-slate-800 rounded-3xl p-6 space-y-6 backdrop-blur-xl relative overflow-hidden shadow-2xl animate-fadeIn">
+            {/* Ambient Accent Gradients */}
+            <div className="absolute -top-24 -right-24 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
             {/* Header Title Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4 relative z-10">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/30 text-amber-400 shadow-inner">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5 relative z-10">
+              <div className="flex items-center gap-3.5">
+                <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-500/20 via-amber-500/10 to-slate-900 border border-amber-500/30 text-amber-400 shadow-inner shrink-0">
                   <Users className="w-6 h-6" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-black uppercase tracking-wider text-slate-100">
+                  <div className="flex items-center gap-2.5">
+                    <h3 className="text-base font-black tracking-wide text-slate-100 font-sans">
                       Family Student Registry
                     </h3>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md font-mono">
-                      Verified Guardian
+                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 rounded-full font-mono flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3 text-amber-400" /> Verified Guardian
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5 font-medium">
-                    Select a student profile below to inspect attendance records, academic standing, homework & fee details for <strong className="text-slate-200">{organizationDetails?.name || user.organization_name || user.school_name || "Hero Atlas Academy"}</strong>
+                  <p className="text-xs text-slate-400 mt-1 font-medium leading-relaxed">
+                    Select a student profile below to view real-time attendance, grades, assignments & fee details for <strong className="text-slate-200">{organizationDetails?.name || user.organization_name || user.school_name || "Hero Atlas Academy"}</strong>
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs font-mono">
+                <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs font-mono shadow-inner">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span className="text-slate-300 font-bold">{parentChildren.length}</span>
-                  <span className="text-slate-500">{parentChildren.length === 1 ? "Student Linked" : "Students Linked"}</span>
+                  <span className="text-slate-200 font-bold">{parentChildren.length}</span>
+                  <span className="text-slate-400">{parentChildren.length === 1 ? "Enrolled Child" : "Enrolled Children"}</span>
                 </div>
               </div>
             </div>
 
-            {/* Child Selector Grid / Cards */}
+            {/* Student Passport Cards Grid */}
             {parentChildren.length === 0 ? (
-              <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-900/80 text-slate-400 text-xs text-center font-medium space-y-1">
-                <p className="text-slate-300 font-semibold">No Linked Students Found</p>
-                <p className="text-slate-500">There are currently no student records mapped to this parent account in the registry.</p>
+              <div className="p-8 rounded-2xl bg-slate-900/40 border border-slate-800/80 text-slate-400 text-xs text-center font-medium space-y-2">
+                <p className="text-slate-200 font-bold text-sm">No Linked Students Found</p>
+                <p className="text-slate-400 max-w-md mx-auto">There are currently no student records mapped to this parent account in the database. Please contact school administration if you believe this is an error.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 relative z-10">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 relative z-10">
                 {parentChildren.map((child: any) => {
                   const isSelected = String(child._id) === String(selectedChildId) || String(child.id) === String(selectedChildId) || String(child.reg_no) === String(selectedChildId);
+                  const childName = child.name || `${child.first_name || "Student"} ${child.last_name || ""}`.trim();
+                  const childInitial = childName.charAt(0).toUpperCase();
+
                   return (
                     <button
                       key={child._id || child.id || child.reg_no}
@@ -2941,53 +2944,65 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                       onClick={() => {
                         setSelectedChildId(child._id || child.id || child.reg_no);
                       }}
-                      className={`text-left p-4 rounded-2xl border transition-all duration-200 cursor-pointer relative flex flex-col justify-between gap-3 ${
+                      className={`text-left p-5 rounded-2xl border transition-all duration-200 cursor-pointer relative flex flex-col justify-between gap-4 group ${
                         isSelected
-                          ? "bg-gradient-to-br from-amber-500/20 via-amber-500/10 to-slate-900/90 border-amber-500/60 text-slate-100 shadow-xl shadow-amber-500/10 ring-1 ring-amber-500/40 scale-[1.01]"
-                          : "bg-slate-900/60 border-slate-800/80 text-slate-400 hover:border-slate-700 hover:bg-slate-900/90 hover:text-slate-200"
+                          ? "bg-slate-900/95 border-amber-500/60 ring-2 ring-amber-500/30 shadow-xl shadow-amber-500/10 scale-[1.01]"
+                          : "bg-slate-900/50 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/80 text-slate-400"
                       }`}
                     >
-                      {/* Selection Header */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 font-black text-sm shadow-inner transition-transform ${
-                            isSelected 
-                              ? "bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 shadow-amber-500/30 scale-105" 
-                              : "bg-slate-800 text-slate-300 border border-slate-700/60"
+                      {/* Top Header Card Info */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 font-black text-base transition-all ${
+                            isSelected
+                              ? "bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 shadow-md shadow-amber-500/20 scale-105"
+                              : "bg-slate-800 text-slate-300 border border-slate-700 group-hover:border-slate-600"
                           }`}>
-                            {child.name ? child.name.charAt(0) : "S"}
+                            {childInitial}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <h4 className={`text-sm font-bold truncate ${isSelected ? "text-amber-300" : "text-slate-200"}`}>
-                              {child.name}
+                            <h4 className={`text-sm font-bold truncate transition-colors ${isSelected ? "text-amber-300" : "text-slate-100 group-hover:text-amber-200"}`}>
+                              {childName}
                             </h4>
-                            <p className="text-[11px] text-slate-500 font-mono truncate">
-                              ID: {child.reg_no || child.studentID || child._id}
+                            <p className="text-[11px] text-slate-400 font-mono truncate mt-0.5">
+                              ID: <span className="text-slate-300">{child.reg_no || child.studentID || child._id}</span>
                             </p>
                           </div>
                         </div>
 
                         {isSelected ? (
-                          <span className="shrink-0 px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                          <span className="shrink-0 px-2.5 py-1 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
                             <CheckCircle className="w-3 h-3" />
                             Active
                           </span>
                         ) : (
-                          <span className="shrink-0 text-[10px] text-slate-500 font-mono px-2 py-0.5 rounded-lg bg-slate-950 border border-slate-800 group-hover:text-amber-400">
-                            Select
+                          <span className="shrink-0 text-[10px] text-slate-400 font-mono px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800 group-hover:border-slate-700 group-hover:text-slate-200 transition-colors">
+                            Select Profile
                           </span>
                         )}
                       </div>
 
-                      {/* Class and Status Tags */}
-                      <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800/60">
-                        <span className="text-slate-400 font-medium truncate flex items-center gap-1">
-                          <BookOpen className="w-3.5 h-3.5 text-amber-500/80 shrink-0" />
-                          <span>{child.class_name || child.grade || "Class N/A"}</span>
-                        </span>
-                        <span className={`text-[11px] font-mono font-semibold ${isSelected ? "text-amber-400" : "text-slate-500"}`}>
-                          {child.academic_standing || "Grade A+"}
-                        </span>
+                      {/* Class & Academic Quick Stats Bar */}
+                      <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-800/80 text-xs">
+                        <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl px-2.5 py-1.5 flex items-center gap-2">
+                          <BookOpen className="w-3.5 h-3.5 text-amber-400/80 shrink-0" />
+                          <div className="min-w-0 truncate">
+                            <span className="text-[9px] text-slate-500 font-mono block uppercase">Class</span>
+                            <span className="text-[11px] font-bold text-slate-200 truncate block">
+                              {child.class_name || child.grade || "Enrolled"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl px-2.5 py-1.5 flex items-center gap-2">
+                          <Award className="w-3.5 h-3.5 text-indigo-400/80 shrink-0" />
+                          <div className="min-w-0 truncate">
+                            <span className="text-[9px] text-slate-500 font-mono block uppercase">Grade</span>
+                            <span className="text-[11px] font-bold text-slate-200 truncate block font-mono">
+                              {child.academic_standing || "Grade A+"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </button>
                   );
@@ -2995,64 +3010,68 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
               </div>
             )}
 
-            {/* Selected Child Detailed Showcase Dashboard */}
+            {/* Selected Child Showcase Command Center */}
             {selectedChild && (
-              <div className="bg-slate-950/80 border border-amber-500/30 rounded-2xl p-5 space-y-4 relative z-10 shadow-inner">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  {/* Student Main Badge */}
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500/25 to-amber-600/10 text-amber-300 border border-amber-500/40 flex items-center justify-center font-black text-lg shrink-0 shadow-md">
-                      <GraduationCap className="w-6 h-6" />
+              <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-amber-500/30 rounded-2xl p-5 space-y-5 relative z-10 shadow-2xl">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                  {/* Student Main Profile Header */}
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500/20 via-amber-500/10 to-indigo-500/10 border border-amber-500/40 text-amber-300 flex items-center justify-center font-black text-xl shrink-0 shadow-lg shadow-amber-500/5">
+                      <GraduationCap className="w-7 h-7 text-amber-400" />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-amber-400">Selected Profile</span>
-                        <span className="text-[10px] font-mono text-amber-300/80 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                          {selectedChild.reg_no || selectedChild.studentID}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
+                          Active Student Overview
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                          REG: {selectedChild.reg_no || selectedChild.studentID}
                         </span>
                       </div>
-                      <h4 className="text-base font-black text-slate-100">{selectedChild.name}</h4>
+                      <h4 className="text-lg font-black text-slate-100 mt-0.5">{selectedChild.name}</h4>
                       <p className="text-xs text-slate-400 font-medium">
-                        Class Section: <strong className="text-slate-200">{selectedChild.class_name || selectedChild.class_id}</strong>
+                        Assigned Class: <strong className="text-slate-200">{selectedChild.class_name || selectedChild.class_id}</strong>
                       </p>
                     </div>
                   </div>
 
-                  {/* Key Performance Indicators */}
-                  <div className="grid grid-cols-3 gap-2.5 sm:flex sm:items-center text-xs">
-                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-center sm:text-left">
-                      <span className="text-[10px] text-slate-500 block uppercase font-mono font-bold">Attendance</span>
-                      <span className="text-xs font-black text-emerald-400 font-mono">
+                  {/* Key Indicators Bar */}
+                  <div className="grid grid-cols-3 gap-3 text-xs">
+                    <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 text-center sm:text-left min-w-[110px]">
+                      <span className="text-[9px] text-slate-400 block uppercase font-mono font-bold">Attendance</span>
+                      <span className="text-xs font-black text-emerald-400 font-mono mt-0.5 block">
                         {selectedChild.attendance_rate || "95% Present"}
                       </span>
                     </div>
 
-                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-center sm:text-left">
-                      <span className="text-[10px] text-slate-500 block uppercase font-mono font-bold">Academic</span>
-                      <span className="text-xs font-black text-indigo-400 font-mono">
+                    <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 text-center sm:text-left min-w-[110px]">
+                      <span className="text-[9px] text-slate-400 block uppercase font-mono font-bold">Academic Standing</span>
+                      <span className="text-xs font-black text-indigo-400 font-mono mt-0.5 block">
                         {selectedChild.academic_standing || "Grade A+"}
                       </span>
                     </div>
 
-                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-center sm:text-left">
-                      <span className="text-[10px] text-slate-500 block uppercase font-mono font-bold">Fee Ledger</span>
-                      <span className="text-xs font-black text-amber-400 font-mono">
+                    <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 text-center sm:text-left min-w-[110px]">
+                      <span className="text-[9px] text-slate-400 block uppercase font-mono font-bold">Fee Status</span>
+                      <span className="text-xs font-black text-amber-400 font-mono mt-0.5 block">
                         {selectedChild.pending_fees || "Paid in Full"}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Quick Action Navigation Buttons for Parent */}
-                <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
-                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 mr-1">Quick Views:</span>
+                {/* Direct Action Hub */}
+                <div className="pt-4 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 mr-2 flex items-center gap-1">
+                    <Activity className="w-3.5 h-3.5 text-amber-400" /> Quick Navigation:
+                  </span>
                   
                   <button
                     type="button"
                     onClick={() => setActiveTab("attendance")}
-                    className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                    className="px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 hover:scale-[1.02]"
                   >
-                    <UserCheck className="w-3.5 h-3.5" />
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Attendance Calendar</span>
                   </button>
 
@@ -3062,10 +3081,10 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                       setActiveTab("home");
                       setHomeTabSubSection("marks");
                     }}
-                    className="px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                    className="px-3.5 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 hover:scale-[1.02]"
                   >
-                    <Award className="w-3.5 h-3.5" />
-                    <span>Academic Marks</span>
+                    <Award className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Academic Report Card</span>
                   </button>
 
                   <button
@@ -3074,19 +3093,28 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                       setActiveTab("home");
                       setHomeTabSubSection("fees");
                     }}
-                    className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                    className="px-3.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 hover:scale-[1.02]"
                   >
-                    <DollarSign className="w-3.5 h-3.5" />
+                    <DollarSign className="w-3.5 h-3.5 text-amber-400" />
                     <span>Fee Receipts</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setActiveTab("homework")}
-                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                    className="px-3.5 py-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 hover:scale-[1.02]"
                   >
-                    <BookOpen className="w-3.5 h-3.5" />
-                    <span>Homework</span>
+                    <ClipboardList className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Homework Registry</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("timetable")}
+                    className="px-3.5 py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 hover:scale-[1.02]"
+                  >
+                    <CalendarRange className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Weekly Timetable</span>
                   </button>
                 </div>
               </div>
