@@ -1,0 +1,6 @@
+{
+  "name": "Hero Atlas",
+  "description": "Hero Atlas School & Academic Management Portal",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

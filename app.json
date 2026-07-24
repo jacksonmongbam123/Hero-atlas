@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Hero Atlas",
+    "slug": "hero-atlas",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.jacksonmongbam123.heroatlas"
+    },
+    "ios": {
+      "bundleIdentifier": "com.jacksonmongbam123.heroatlas"
+    }
+  }
+}

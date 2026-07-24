@@ -1,0 +1,219 @@
+{
+  "classes": [],
+  "students": [],
+  "logs": [
+    {
+      "id": "log-6a4dc00205a70b931d4abb39-2026-07-23-1784827081172",
+      "class_id": "6a4dc00205a70b931d4abb39",
+      "className": "Class 1 - Section A",
+      "date": "2026-07-23",
+      "present": 3,
+      "absent": 1,
+      "late": 0
+    },
+    {
+      "id": "log-6a4dc00205a70b931d4abb39-2026-07-22-1784829183351",
+      "class_id": "6a4dc00205a70b931d4abb39",
+      "className": "Class 1 - Section A",
+      "date": "2026-07-22",
+      "present": 0,
+      "absent": 1,
+      "late": 0
+    },
+    {
+      "id": "log-6a4dc00205a70b931d4abb39-2026-07-21-1784834698822",
+      "class_id": "6a4dc00205a70b931d4abb39",
+      "className": "Class 1 - Section A",
+      "date": "2026-07-21",
+      "present": 1,
+      "absent": 0,
+      "late": 0
+    },
+    {
+      "id": "log-6a4dc00205a70b931d4abb39-2026-07-09-1784834715681",
+      "class_id": "6a4dc00205a70b931d4abb39",
+      "className": "Class 1 - Section A",
+      "date": "2026-07-09",
+      "present": 0,
+      "absent": 1,
+      "late": 0
+    },
+    {
+      "id": "log-6a4dc00205a70b931d4abb39-2026-07-17-1784834728694",
+      "class_id": "6a4dc00205a70b931d4abb39",
+      "className": "Class 1 - Section A",
+      "date": "2026-07-17",
+      "present": 1,
+      "absent": 0,
+      "late": 0
+    },
+    {
+      "id": "log-6a4dc00205a70b931d4abb39-2026-07-24-1784867123826",
+      "class_id": "6a4dc00205a70b931d4abb39",
+      "className": "Class 1 - Section A",
+      "date": "2026-07-24",
+      "present": 0,
+      "absent": 1,
+      "late": 0
+    }
+  ],
+  "leaves": [],
+  "extraActivities": [
+    {
+      "_id": "act-football",
+      "extra_activity_type_id": "sports",
+      "activity_name": "Varsity Football Team",
+      "established_date": "2018-04-12T00:00:00.000Z",
+      "is_active": true
+    },
+    {
+      "_id": "act-chess",
+      "extra_activity_type_id": "boardgames",
+      "activity_name": "Strategic Chess Club",
+      "established_date": "2020-01-15T00:00:00.000Z",
+      "is_active": true
+    },
+    {
+      "_id": "act-debate",
+      "extra_activity_type_id": "academic",
+      "activity_name": "National Debate Society",
+      "established_date": "2015-09-01T00:00:00.000Z",
+      "is_active": true
+    },
+    {
+      "_id": "act-music",
+      "extra_activity_type_id": "art",
+      "activity_name": "Symphonic Band & Orchestra",
+      "established_date": "2010-08-20T00:00:00.000Z",
+      "is_active": true
+    },
+    {
+      "_id": "act-robotics",
+      "extra_activity_type_id": "tech",
+      "activity_name": "AI & Robotics Association",
+      "established_date": "2022-02-18T00:00:00.000Z",
+      "is_active": true
+    }
+  ],
+  "extraActivityTeachers": [
+    {
+      "_id": "rel-act-1",
+      "extra_activity_id": "act-football",
+      "teacher_id": "T101",
+      "start_date": "2026-01-01T00:00:00.000Z",
+      "end_date": "2026-12-31T00:00:00.000Z"
+    },
+    {
+      "_id": "rel-act-2",
+      "extra_activity_id": "act-chess",
+      "teacher_id": "T101",
+      "start_date": "2026-03-15T00:00:00.000Z",
+      "end_date": "2026-09-15T00:00:00.000Z"
+    }
+  ],
+  "organizations": [
+    {
+      "_id": "org-hero-1",
+      "name": "Hero Atlas Academy of Excellence",
+      "line1": "100 Academic Boulevard",
+      "line2": "North Wing Campus",
+      "line3": "Accredited Division",
+      "city": "Metropolis",
+      "postcode": "10001",
+      "key": "ATH-ORG-941"
+    }
+  ],
+  "notifications": [
+    {
+      "_id": "notif-1",
+      "title": "Faculty Board Briefing",
+      "message": "All department leads and active instructional faculty are requested to join the Dean in the main assembly hall at 02:00 PM today. We will review safety protocols and HAASC standard compliance metrics.",
+      "target_type": "teachers",
+      "target_class_id": "",
+      "target_student_id": "",
+      "sender_id": "admin-central",
+      "organization_id": "ATH-ORG-941",
+      "date": "2026-07-19T08:00:00.000Z"
+    },
+    {
+      "_id": "notif-2",
+      "title": "Accreditation Site Audit Scheduled",
+      "message": "The HAASC evaluation committee will conduct their physical onsite campus audit next Tuesday. Please ensure classroom ledger profiles and student rosters are fully synchronized.",
+      "target_type": "teachers",
+      "target_class_id": "",
+      "target_student_id": "",
+      "sender_id": "admin-central",
+      "organization_id": "ATH-ORG-941",
+      "date": "2026-07-18T10:30:00.000Z"
+    },
+    {
+      "_id": "notif-3",
+      "title": "Upgrade Complete: Extra Activities Relational Mapping",
+      "message": "The relational database mapping schema for Extra-Curricular Activity and Student registries is now fully live and active across all branches.",
+      "target_type": "teachers",
+      "target_class_id": "",
+      "target_student_id": "",
+      "sender_id": "sys-admin",
+      "organization_id": "ATH-ORG-941",
+      "date": "2026-07-17T14:15:00.000Z"
+    }
+  ],
+  "student_attendance": [
+    {
+      "id": "att-6a5a4d088c507b0787b3a2e5-2026-07-23",
+      "studentID": "6a5a4d088c507b0787b3a2e5",
+      "date": "2026-07-23",
+      "attended": true
+    },
+    {
+      "id": "att-6a5a6cfb73162140b7169383-2026-07-23",
+      "studentID": "6a5a6cfb73162140b7169383",
+      "date": "2026-07-23",
+      "attended": true
+    },
+    {
+      "id": "att-6a5a6cfb73162140b7169386-2026-07-23",
+      "studentID": "6a5a6cfb73162140b7169386",
+      "date": "2026-07-23",
+      "attended": false
+    },
+    {
+      "id": "att-6a5cf221dd10dd1d4c38f0e2-2026-07-23",
+      "studentID": "6a5cf221dd10dd1d4c38f0e2",
+      "date": "2026-07-23",
+      "attended": true
+    },
+    {
+      "id": "att-6a5cf221dd10dd1d4c38f0e2-2026-07-22",
+      "studentID": "6a5cf221dd10dd1d4c38f0e2",
+      "date": "2026-07-22",
+      "attended": false
+    },
+    {
+      "id": "att-6a5cf221dd10dd1d4c38f0e2-2026-07-21",
+      "studentID": "6a5cf221dd10dd1d4c38f0e2",
+      "date": "2026-07-21",
+      "attended": true
+    },
+    {
+      "id": "att-6a5cf221dd10dd1d4c38f0e2-2026-07-09",
+      "studentID": "6a5cf221dd10dd1d4c38f0e2",
+      "date": "2026-07-09",
+      "attended": false
+    },
+    {
+      "id": "att-6a5cf221dd10dd1d4c38f0e2-2026-07-17",
+      "studentID": "6a5cf221dd10dd1d4c38f0e2",
+      "date": "2026-07-17",
+      "attended": true
+    },
+    {
+      "id": "att-6a5cf221dd10dd1d4c38f0e2-2026-07-24",
+      "studentID": "6a5cf221dd10dd1d4c38f0e2",
+      "date": "2026-07-24",
+      "attended": false
+    }
+  ],
+  "marks": [],
+  "fees": []
+}
