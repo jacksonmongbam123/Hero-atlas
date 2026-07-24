@@ -5,8 +5,18 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#020b24"
+    },
     "android": {
-      "package": "com.jacksonmongbam123.heroatlas"
+      "package": "com.jacksonmongbam123.heroatlas",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#020b24"
+      }
     },
     "ios": {
       "bundleIdentifier": "com.jacksonmongbam123.heroatlas"
