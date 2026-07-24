@@ -5935,7 +5935,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
               >
                 <button
                   onClick={onLogout}
-                  className="w-full flex items-center justify-center gap-2 text-red-500 hover:text-red-400 bg-white/5 hover:bg-white/10 border border-white/10 py-3 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-lg active:scale-98"
+                  className="w-full flex items-center justify-center gap-2 text-red-500 hover:text-red-400 bg-white/5 hover:bg-white/10 border border-white/10 py-3 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-98"
                 >
                   <LogOut className="w-4 h-4 text-red-500" />
                   <span>Logout</span>

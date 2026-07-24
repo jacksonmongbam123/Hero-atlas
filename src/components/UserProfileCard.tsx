@@ -184,7 +184,7 @@ export default function UserProfileCard({ user, onLogout }: UserProfileCardProps
       <div style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom, 24px))" }}>
         <button
           onClick={onLogout}
-          className="w-full bg-white/5 hover:bg-white/10 text-red-500 hover:text-red-400 font-medium py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 border border-white/10 transition-all cursor-pointer shadow-md"
+          className="w-full bg-white/5 hover:bg-white/10 text-red-500 hover:text-red-400 font-medium py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 border border-white/10 transition-all cursor-pointer"
         >
           <LogOut className="w-3.5 h-3.5 text-red-500" />
           <span>Logout from Session</span>
