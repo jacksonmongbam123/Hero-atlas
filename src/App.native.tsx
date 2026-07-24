@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { StyleSheet, SafeAreaView, StatusBar, View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
+import { StyleSheet, SafeAreaView, StatusBar, View, Text, TouchableOpacity, ActivityIndicator, Platform } from "react-native";
 import { WebView } from "react-native-webview";
 
 const APP_URL = "https://hero-atlas.onrender.com?platform=mobile";
@@ -17,7 +17,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#020b24" />
+      <StatusBar barStyle="light-content" backgroundColor="#020b24" translucent={false} />
       <View style={styles.content}>
         <WebView
           key={key}
@@ -61,6 +61,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#020b24",
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 0) : 0,
   },
   content: {
     flex: 1,
