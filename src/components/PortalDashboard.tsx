@@ -83,15 +83,18 @@ function StudentAttendanceCalendar({ user, isDark, token }: { user: any; isDark:
   const years = Array.from({ length: 8 }, (_, i) => 2023 + i);
 
   // Student identification tokens
-  const studentTokens = [
+  const studentTokens = Array.from(new Set([
     user.studentID,
     user.student_id,
-    user._id,
     user.id,
+    user._id,
     user.reg_no,
+    user.rollNo,
     user.username,
-    user.phone
-  ].filter(Boolean).map(val => String(val).trim());
+    user.phone,
+    ...(Array.isArray(user.students) ? user.students.map((s: any) => typeof s === "object" ? (s.studentID || s.student_id || s._id || s.id) : s) : []),
+    ...(Array.isArray(user.children) ? user.children.map((c: any) => typeof c === "object" ? (c.studentID || c.student_id || c._id || c.id) : c) : [])
+  ].filter(Boolean).map(val => String(val).trim())));
 
   const primaryStudentId = studentTokens[0] || "S101";
 
@@ -102,14 +105,85 @@ function StudentAttendanceCalendar({ user, isDark, token }: { user: any; isDark:
     const rawToken = token || user?.token || "";
     const authToken = rawToken ? (rawToken.startsWith("Bearer ") ? rawToken : `Bearer ${rawToken}`) : "";
 
+    const fetchTokens = studentTokens.length > 0 ? studentTokens : [primaryStudentId];
+
+    // Generate month date strings (YYYY-MM-DD)
+    const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+    const monthPadded = String(selectedMonth + 1).padStart(2, "0");
+    const monthDates: string[] = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayPadded = String(day).padStart(2, "0");
+      monthDates.push(`${selectedYear}-${monthPadded}-${dayPadded}`);
+    }
+
     try {
-      // 1. Fetch from local backend /api/attendance/student_month
+      // 1. Fetch remote absence records from https://abms-lkw9.onrender.com/class/attendance/absence
+      try {
+        const absenceRes = await fetchWithFallback("/class/attendance/absence", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": authToken
+          }
+        }).catch(() => null);
+
+        if (Array.isArray(absenceRes)) {
+          absenceRes.forEach((rec: any) => {
+            const recSId = String(rec.studentID || rec.student_id || rec.student || "").trim().toLowerCase();
+            const matchesToken = fetchTokens.some(t => t.toLowerCase() === recSId || recSId.includes(t.toLowerCase()) || t.toLowerCase().includes(recSId));
+            if (matchesToken) {
+              const dateStr = String(rec.date || rec.attendanceDate || rec.attendance_date || "").split("T")[0];
+              if (dateStr) {
+                newMap[dateStr] = "absent";
+              }
+            }
+          });
+        }
+      } catch (e) {
+        console.warn("Absence lookup warning:", e);
+      }
+
+      // 2. Query school repo remote backend (https://abms-lkw9.onrender.com/class/attendance/lookup) for each date in selected month
+      for (const sId of fetchTokens) {
+        try {
+          const promises = monthDates.map(dStr =>
+            fetchWithFallback("/class/attendance/lookup", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": authToken
+              },
+              body: JSON.stringify({
+                studentID: sId,
+                date: dStr
+              })
+            }).catch(() => null)
+          );
+
+          const results = await Promise.all(promises);
+          results.forEach((res) => {
+            if (Array.isArray(res) && res.length > 0) {
+              res.forEach((rec: any) => {
+                const dateStr = String(rec.date || rec.attendanceDate || rec.attendance_date || "").split("T")[0];
+                if (dateStr) {
+                  const isPresent = rec.attended === true || rec.attended === "true" || String(rec.status).toLowerCase() === "present" || String(rec.status).toLowerCase() === "late" || String(rec.status).toLowerCase() === "p";
+                  newMap[dateStr] = isPresent ? "present" : "absent";
+                }
+              });
+            }
+          });
+        } catch (err) {
+          console.warn(`Lookup for studentID ${sId} warning:`, err);
+        }
+      }
+
+      // 3. Fetch from local backend /api/attendance/student_month
       try {
         const localRes = await fetch("/api/attendance/student_month", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            studentIDs: studentTokens.length > 0 ? studentTokens : [primaryStudentId],
+            studentIDs: fetchTokens,
             studentID: primaryStudentId,
             year: selectedYear,
             month: selectedMonth
@@ -120,7 +194,7 @@ function StudentAttendanceCalendar({ user, isDark, token }: { user: any; isDark:
           if (Array.isArray(records)) {
             records.forEach((rec: any) => {
               const dateVal = String(rec.date || rec.attendanceDate || rec.attendance_date || "").split("T")[0];
-              if (dateVal) {
+              if (dateVal && !newMap[dateVal]) {
                 const isPresent = rec.attended === true || rec.attended === "true" || String(rec.status).toLowerCase() === "present" || String(rec.status).toLowerCase() === "late" || String(rec.status).toLowerCase() === "p";
                 newMap[dateVal] = isPresent ? "present" : "absent";
               }
@@ -131,8 +205,7 @@ function StudentAttendanceCalendar({ user, isDark, token }: { user: any; isDark:
         console.warn("Local month attendance fetch warning:", err);
       }
 
-      // 2. Fetch local lookup for student ID tokens
-      const fetchTokens = studentTokens.length > 0 ? studentTokens : [primaryStudentId];
+      // 4. Fetch local lookup for student ID tokens
       try {
         const localLookup = await fetch("/api/class/attendance/lookup", {
           method: "POST",
@@ -147,60 +220,6 @@ function StudentAttendanceCalendar({ user, isDark, token }: { user: any; isDark:
           if (Array.isArray(records)) {
             records.forEach((rec: any) => {
               const dateVal = String(rec.date || rec.attendanceDate || rec.attendance_date || "").split("T")[0];
-              if (dateVal) {
-                const isPresent = rec.attended === true || rec.attended === "true" || String(rec.status).toLowerCase() === "present" || String(rec.status).toLowerCase() === "late" || String(rec.status).toLowerCase() === "p";
-                newMap[dateVal] = isPresent ? "present" : "absent";
-              }
-            });
-          }
-        }
-      } catch (err) {
-        console.warn("Local lookup fetch warning:", err);
-      }
-
-      // 3. Fetch lookup for student from school repo remote backend (https://abms-lkw9.onrender.com/class/attendance/lookup)
-      for (const sId of fetchTokens) {
-        try {
-          const res = await fetchWithFallback("/class/attendance/lookup", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": authToken
-            },
-            body: JSON.stringify({
-              studentID: sId
-            })
-          });
-
-          if (Array.isArray(res) && res.length > 0) {
-            res.forEach((rec: any) => {
-              const dateStr = String(rec.date || rec.attendanceDate || rec.attendance_date || "").split("T")[0];
-              if (dateStr) {
-                const isPresent = rec.attended === true || rec.attended === "true" || String(rec.status).toLowerCase() === "present" || String(rec.status).toLowerCase() === "late" || String(rec.status).toLowerCase() === "p";
-                newMap[dateStr] = isPresent ? "present" : "absent";
-              }
-            });
-          }
-        } catch (err) {
-          console.warn(`Lookup for studentID ${sId} warning:`, err);
-        }
-      }
-
-      // 4. Fallback: Catch all month attendance logged in database
-      try {
-        const fallbackRes = await fetch("/api/attendance/student_month", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            year: selectedYear,
-            month: selectedMonth
-          })
-        });
-        if (fallbackRes.ok) {
-          const records = await fallbackRes.json();
-          if (Array.isArray(records)) {
-            records.forEach((rec: any) => {
-              const dateVal = String(rec.date || rec.attendanceDate || rec.attendance_date || "").split("T")[0];
               if (dateVal && !newMap[dateVal]) {
                 const isPresent = rec.attended === true || rec.attended === "true" || String(rec.status).toLowerCase() === "present" || String(rec.status).toLowerCase() === "late" || String(rec.status).toLowerCase() === "p";
                 newMap[dateVal] = isPresent ? "present" : "absent";
@@ -209,7 +228,7 @@ function StudentAttendanceCalendar({ user, isDark, token }: { user: any; isDark:
           }
         }
       } catch (err) {
-        console.warn("Fallback month attendance fetch warning:", err);
+        console.warn("Local lookup fetch warning:", err);
       }
 
       setAttendanceMap(newMap);
