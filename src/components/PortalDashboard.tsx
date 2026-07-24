@@ -5927,10 +5927,15 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
               </div>
 
               {/* Secure Logout Section in Drawer Footer */}
-              <div className={`p-6 border-t border-slate-900 bg-slate-950/40 ${isMobileApp ? "pb-9" : ""}`}>
+              <div
+                className="p-6 border-t border-slate-900 bg-slate-950/40"
+                style={{
+                  paddingBottom: "max(3rem, calc(1.5rem + env(safe-area-inset-bottom, 40px)))"
+                }}
+              >
                 <button
                   onClick={onLogout}
-                  className="w-full flex items-center justify-center gap-2 text-red-500 hover:text-red-400 bg-white/5 hover:bg-white/10 border border-white/10 py-2.5 px-4 rounded-lg text-xs font-medium transition-all cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 text-red-500 hover:text-red-400 bg-white/5 hover:bg-white/10 border border-white/10 py-3 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-lg active:scale-98"
                 >
                   <LogOut className="w-4 h-4 text-red-500" />
                   <span>Logout</span>
