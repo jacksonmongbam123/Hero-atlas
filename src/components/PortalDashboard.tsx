@@ -536,7 +536,7 @@ interface PortalDashboardProps {
 }
 
 export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }: PortalDashboardProps) {
-  const isMobileApp = typeof window !== "undefined" && window.location.search.includes("platform=mobile");
+  const isMobileApp = typeof window !== "undefined" && Boolean(window.location?.search?.includes("platform=mobile"));
   const [activeTab, setActiveTab] = useState<"home" | "attendance" | "schedule" | "timetable" | "homework">("home");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 

@@ -19,7 +19,7 @@ interface IdentityGatewayProps {
 }
 
 export default function IdentityGateway({ theme, onToggleTheme, onSuccess }: IdentityGatewayProps) {
-  const isMobileApp = typeof window !== "undefined" && window.location.search.includes("platform=mobile");
+  const isMobileApp = typeof window !== "undefined" && Boolean(window.location?.search?.includes("platform=mobile"));
   const [activeRole, setActiveRole] = useState<"teacher" | "student" | "parent">("teacher");
   const [portalId, setPortalId] = useState("");
   const [password, setPassword] = useState("");
