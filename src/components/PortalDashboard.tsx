@@ -2768,7 +2768,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
     <div className="min-h-screen bg-portal-main text-slate-100 flex flex-col font-sans selection:bg-indigo-500/30 transition-colors duration-200">
       
       {/* Top Professional Portal Navigation */}
-      <header className={`bg-slate-950/85 backdrop-blur-md border-b border-slate-900 px-6 flex justify-between items-center z-50 sticky top-0 ${isMobileApp ? "pt-[calc(0.85rem+env(safe-area-inset-top,8px))] pb-3" : "py-4"}`}>
+      <header className={`bg-slate-950/85 backdrop-blur-md border-b border-slate-900 px-6 flex justify-between items-center z-50 sticky top-0 ${isMobileApp ? "py-2.5 px-4" : "py-4"}`}>
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-xl border ${branding.bg} ${branding.border}`}>
             <GraduationCap className={`w-6 h-6 ${branding.accent}`} />
@@ -5613,7 +5613,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       </main>
 
       {/* Modern Compact Portal Footer with Padding for Navigation Bar */}
-      <footer className={`bg-slate-950/50 border-t border-slate-900/80 py-6 px-6 text-center text-xs text-slate-500 select-none mt-auto ${isMobileApp ? "pb-48" : "pb-28"}`}>
+      <footer className={`bg-slate-950/50 border-t border-slate-900/80 py-6 px-6 text-center text-xs text-slate-500 select-none mt-auto ${isMobileApp ? "pb-24" : "pb-28"}`}>
         <p className="font-bold">© 2026 Hero Atlas School Portal. All Rights Reserved.</p>
         <p className="text-[10px] text-slate-600 mt-1">
           Secured with JSON Web Token (JWT) Authorization • Connecting to Onrender Server API Gateway
@@ -5621,7 +5621,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       </footer>
 
       {/* Sticky Bottom Navigation Bar */}
-      <div className={`fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 backdrop-blur-md border-t border-slate-900/80 px-4 shadow-2xl ${isMobileApp ? "pt-2 pb-[calc(1.75rem+env(safe-area-inset-bottom,20px))]" : "py-2.5"}`}>
+      <div className={`fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 backdrop-blur-md border-t border-slate-900/80 px-4 shadow-2xl ${isMobileApp ? "pt-1.5 pb-2.5" : "py-2.5"}`}>
         <div className="max-w-md mx-auto flex items-center justify-between gap-1">
           <button
             onClick={() => {

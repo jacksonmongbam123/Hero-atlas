@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { StyleSheet, SafeAreaView, StatusBar, View, Text, TouchableOpacity, ActivityIndicator, Platform } from "react-native";
+import { StyleSheet, SafeAreaView, StatusBar, View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
 import { WebView } from "react-native-webview";
 
 const APP_URL = "https://hero-atlas.onrender.com?platform=mobile";
@@ -17,7 +17,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#020b24" translucent={false} />
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
       <View style={styles.content}>
         <WebView
           key={key}
@@ -36,7 +36,7 @@ export default function App() {
           }}
           renderLoading={() => (
             <View style={styles.centerContainer}>
-              <ActivityIndicator size="large" color="#3b82f6" />
+              <ActivityIndicator size="large" color="#2563eb" />
               <Text style={styles.loadingText}>Loading Hero Atlas...</Text>
             </View>
           )}
@@ -60,15 +60,14 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#020b24",
-    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 0) : 0,
+    backgroundColor: "#ffffff",
   },
   content: {
     flex: 1,
   },
   webview: {
     flex: 1,
-    backgroundColor: "#020b24",
+    backgroundColor: "#ffffff",
   },
   centerContainer: {
     position: "absolute",
@@ -78,17 +77,17 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#020b24",
+    backgroundColor: "#ffffff",
   },
   loadingText: {
     marginTop: 12,
-    color: "#94a3b8",
+    color: "#64748b",
     fontSize: 14,
     fontWeight: "500",
   },
   errorOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#020b24",
+    backgroundColor: "#ffffff",
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
@@ -96,12 +95,12 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 22,
     fontWeight: "bold",
-    color: "#ffffff",
+    color: "#0f172a",
     marginBottom: 8,
   },
   errorText: {
     fontSize: 14,
-    color: "#94a3b8",
+    color: "#64748b",
     textAlign: "center",
     marginBottom: 20,
   },
