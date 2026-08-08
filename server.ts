@@ -1855,13 +1855,16 @@ async function startServer() {
 
         let docs = await mongo.collection("attendances").find(filter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
         if (docs && docs.length > 0) {
-          matches = docs.map(d => ({
-            ...d,
-            studentID: String(d.studentID || d.student_id || d.studentId || ""),
-            date: formatToYMD(d.date || d.attendanceDate || d.attendance_date),
-            attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
-            status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
-          }));
+          matches = docs.map(d => {
+            const parsed = parseAttendedStatus(d);
+            return {
+              ...d,
+              studentID: String(d.studentID || d.student_id || d.studentId || ""),
+              date: formatToYMD(d.date || d.attendanceDate || d.attendance_date),
+              attended: parsed.attended,
+              status: parsed.status
+            };
+          });
         }
       }
     } catch (err) {
@@ -1980,13 +1983,16 @@ async function startServer() {
         let docs = await mongo.collection("attendances").find(filter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
         if (docs && docs.length > 0) {
           console.log("[MongoDB Student Month Lookup] Found docs:", docs.length);
-          matches = docs.map(d => ({
-            ...d,
-            studentID: String(d.studentID || d.student_id || d.studentId || ""),
-            date: formatToYMD(d.date || d.attendanceDate || d.attendance_date),
-            attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
-            status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
-          }));
+          matches = docs.map(d => {
+            const parsed = parseAttendedStatus(d);
+            return {
+              ...d,
+              studentID: String(d.studentID || d.student_id || d.studentId || ""),
+              date: formatToYMD(d.date || d.attendanceDate || d.attendance_date),
+              attended: parsed.attended,
+              status: parsed.status
+            };
+          });
         }
       }
     } catch (err) {

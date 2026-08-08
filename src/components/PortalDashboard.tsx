@@ -521,21 +521,28 @@ function UnusedStudentAttendanceCalendar({
           })
         }).catch(() => null);
 
+        let list: any[] = [];
         if (Array.isArray(records)) {
-          records.forEach((rec: any) => {
-            const dateVal = String(rec.date || rec.attendanceDate || rec.attendance_date || "").split("T")[0];
-            if (dateVal) {
-              const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
-              if (statusLower === "late") {
-                newMap[dateVal] = "late";
-              } else if (statusLower === "absent" || rec.attended === false || rec.attended === "false" || rec.attended === 0) {
-                newMap[dateVal] = "absent";
-              } else if (statusLower === "present" || statusLower === "p" || rec.attended === true || rec.attended === "true" || rec.attended === 1) {
-                newMap[dateVal] = "present";
-              }
-            }
-          });
+          list = records;
+        } else if (records && Array.isArray(records.records)) {
+          list = records.records;
+        } else if (records && Array.isArray(records.data)) {
+          list = records.data;
         }
+
+        list.forEach((rec: any) => {
+          const dateVal = String(rec.date || rec.attendanceDate || rec.attendance_date || "").split("T")[0];
+          if (dateVal) {
+            const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
+            if (statusLower === "late") {
+              newMap[dateVal] = "late";
+            } else if (statusLower === "absent" || rec.attended === false || rec.attended === "false" || rec.attended === 0) {
+              newMap[dateVal] = "absent";
+            } else if (statusLower === "present" || statusLower === "p" || rec.attended === true || rec.attended === "true" || rec.attended === 1) {
+              newMap[dateVal] = "present";
+            }
+          }
+        });
       } catch (err) {
         console.warn("Local month attendance fetch warning:", err);
       }
@@ -553,21 +560,28 @@ function UnusedStudentAttendanceCalendar({
           })
         }).catch(() => null);
 
+        let list: any[] = [];
         if (Array.isArray(records)) {
-          records.forEach((rec: any) => {
-            const dateVal = String(rec.date || rec.attendanceDate || rec.attendance_date || "").split("T")[0];
-            if (dateVal) {
-              const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
-              if (statusLower === "late") {
-                newMap[dateVal] = "late";
-              } else if (statusLower === "absent" || rec.attended === false || rec.attended === "false" || rec.attended === 0) {
-                newMap[dateVal] = "absent";
-              } else if (statusLower === "present" || statusLower === "p" || rec.attended === true || rec.attended === "true" || rec.attended === 1) {
-                newMap[dateVal] = "present";
-              }
-            }
-          });
+          list = records;
+        } else if (records && Array.isArray(records.records)) {
+          list = records.records;
+        } else if (records && Array.isArray(records.data)) {
+          list = records.data;
         }
+
+        list.forEach((rec: any) => {
+          const dateVal = String(rec.date || rec.attendanceDate || rec.attendance_date || "").split("T")[0];
+          if (dateVal) {
+            const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
+            if (statusLower === "late") {
+              newMap[dateVal] = "late";
+            } else if (statusLower === "absent" || rec.attended === false || rec.attended === "false" || rec.attended === 0) {
+              newMap[dateVal] = "absent";
+            } else if (statusLower === "present" || statusLower === "p" || rec.attended === true || rec.attended === "true" || rec.attended === 1) {
+              newMap[dateVal] = "present";
+            }
+          }
+        });
       } catch (err) {
         console.warn("Local lookup fetch warning:", err);
       }

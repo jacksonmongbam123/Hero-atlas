@@ -223,38 +223,28 @@ export function StudentAttendanceCalendar({
     // Helper to apply status to date
     const applyRecord = (rec: any) => {
       if (!rec) return;
-      const recSId = String(
-        rec.studentID || rec.student_id || rec.studentId || rec.student || rec.reg_no || rec.user_id || rec.id || rec._id || ""
-      ).trim().toLowerCase();
       
-      const matchesToken = fetchTokens.length === 0 ? true : fetchTokens.some(t => {
-        const lowerT = t.toLowerCase();
-        return lowerT === recSId || recSId === lowerT || recSId.includes(lowerT) || lowerT.includes(recSId);
-      });
+      const rawDate = rec.date || rec.attendanceDate || rec.attendance_date;
+      let dateStr = "";
+      if (rawDate instanceof Date) {
+        dateStr = rawDate.toISOString().split("T")[0];
+      } else {
+        const s = String(rawDate || "").trim();
+        dateStr = s.includes("T") ? s.split("T")[0] : s.slice(0, 10);
+      }
 
-      if (matchesToken) {
-        const rawDate = rec.date || rec.attendanceDate || rec.attendance_date;
-        let dateStr = "";
-        if (rawDate instanceof Date) {
-          dateStr = rawDate.toISOString().split("T")[0];
-        } else {
-          const s = String(rawDate || "").trim();
-          dateStr = s.includes("T") ? s.split("T")[0] : s.slice(0, 10);
-        }
+      if (dateStr && dateStr.length >= 10) {
+        const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
+        const isLate = statusLower === "late";
+        const isAbsent = statusLower === "absent" || rec.attended === false || rec.attended === "false" || rec.attended === 0 || rec.attended === "0";
+        const isPresent = statusLower === "present" || statusLower === "p" || rec.attended === true || rec.attended === "true" || rec.attended === 1 || rec.attended === "1";
 
-        if (dateStr && dateStr.length >= 10) {
-          const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
-          const isLate = statusLower === "late";
-          const isAbsent = statusLower === "absent" || rec.attended === false || rec.attended === "false" || rec.attended === 0 || rec.attended === "0";
-          const isPresent = statusLower === "present" || statusLower === "p" || rec.attended === true || rec.attended === "true" || rec.attended === 1 || rec.attended === "1";
-
-          if (isLate) {
-            newMap[dateStr] = "late";
-          } else if (isAbsent) {
-            newMap[dateStr] = "absent";
-          } else if (isPresent) {
-            newMap[dateStr] = "present";
-          }
+        if (isLate) {
+          newMap[dateStr] = "late";
+        } else if (isAbsent) {
+          newMap[dateStr] = "absent";
+        } else if (isPresent) {
+          newMap[dateStr] = "present";
         }
       }
     };
