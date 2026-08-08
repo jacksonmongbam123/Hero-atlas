@@ -1800,6 +1800,7 @@ async function startServer() {
     const body = req.body || {};
     const query = req.query || {};
     const data = { ...query, ...body };
+    const authHeader = req.headers.authorization || req.headers["x-access-token"] || data.token || "";
 
     const rawIds = data.studentIDs || data.studentID || data.studentId || data.student_id || data.reg_no || data.id || data._id;
     let targetIds: string[] = [];
@@ -1812,15 +1813,12 @@ async function startServer() {
     const dateFilter = data.date || data.attendanceDate || data.attendance_date;
     const cleanDateFilter = dateFilter ? formatToYMD(dateFilter) : null;
 
-    let matches: any[] = [];
+    const matchesMap = new Map<string, any>();
 
-    let isMongoConnected = false;
-
-    // Query MongoDB attendances collection directly
+    // 1. Query MongoDB attendances collection
     try {
       const mongo = await getMongoDb();
       if (mongo) {
-        isMongoConnected = true;
         const expandedTokensSet = await expandStudentTokens(mongo, targetIds);
         const tokenList = Array.from(expandedTokensSet);
 
@@ -1859,34 +1857,28 @@ async function startServer() {
 
         let docs = await mongo.collection("attendances").find(filter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
         if (docs && docs.length > 0) {
-          matches = docs.map(d => ({
-            ...d,
-            studentID: String(d.studentID || d.student_id || d.studentId || ""),
-            date: formatToYMD(d.date || d.attendanceDate || d.attendance_date),
-            attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
-            status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
-          }));
-        } else {
-          // Fallback query if specific student match yielded 0 records
-          const fallbackFilter = cleanDateFilter ? { $or: buildDateFilterConditions(cleanDateFilter) } : {};
-          let fallbackDocs = await mongo.collection("attendances").find(fallbackFilter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
-          if (fallbackDocs && fallbackDocs.length > 0) {
-            matches = fallbackDocs.map(d => ({
+          docs.forEach(d => {
+            const sId = String(d.studentID || d.student_id || d.studentId || d.reg_no || d.id || d._id || "");
+            const dateStr = formatToYMD(d.date || d.attendanceDate || d.attendance_date);
+            const key = `${sId.toLowerCase()}_${dateStr}`;
+            matchesMap.set(key, {
               ...d,
-              studentID: String(d.studentID || d.student_id || d.studentId || ""),
-              date: formatToYMD(d.date || d.attendanceDate || d.attendance_date),
+              studentID: sId,
+              student_id: sId,
+              date: dateStr,
+              attendanceDate: dateStr,
               attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
               status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
-            }));
-          }
+            });
+          });
         }
       }
     } catch (err) {
       console.warn("[MongoDB Attendance Lookup] Warning:", err);
     }
 
-    // Only merge local JSON if MongoDB is NOT connected
-    if (!isMongoConnected) {
+    // 2. Query Local JSON Database (db.json / in-memory DB)
+    try {
       const db = loadDb();
       const attList = db.student_attendance || [];
       if (targetIds.length > 0) {
@@ -1906,16 +1898,72 @@ async function startServer() {
         });
 
         localMatches.forEach(lm => {
-          const lmDate = formatToYMD(lm.date || lm.attendanceDate);
-          const lmSId = String(lm.studentID || lm.student_id || "").toLowerCase();
-          const exists = matches.some(m => String(m.studentID || m.student_id || "").toLowerCase() === lmSId && formatToYMD(m.date) === lmDate);
-          if (!exists) {
-            matches.push(lm);
+          const sId = String(lm.studentID || lm.student_id || lm.studentId || lm.reg_no || lm.id || lm._id || "");
+          const dateStr = formatToYMD(lm.date || lm.attendanceDate);
+          const key = `${sId.toLowerCase()}_${dateStr}`;
+          if (!matchesMap.has(key)) {
+            matchesMap.set(key, {
+              ...lm,
+              studentID: sId,
+              student_id: sId,
+              date: dateStr,
+              attendanceDate: dateStr,
+              attended: lm.attended === true || lm.attended === "true" || String(lm.status).toLowerCase() === "present" || String(lm.status).toLowerCase() === "late",
+              status: (lm.attended === true || lm.attended === "true" || String(lm.status).toLowerCase() === "present" || String(lm.status).toLowerCase() === "late") ? (String(lm.status).toLowerCase() === "late" ? "late" : "present") : "absent"
+            });
           }
         });
       }
+    } catch (err) {
+      console.warn("[Local JSON Attendance Lookup] Warning:", err);
     }
 
+    // 3. Fallback Remote Proxy to https://abms-lkw9.onrender.com
+    if (targetIds.length > 0 && authHeader) {
+      try {
+        const remoteHeaders: Record<string, string> = { "Content-Type": "application/json" };
+        const cleanTok = authHeader.replace(/^Bearer\s+/i, "").trim();
+        remoteHeaders["Authorization"] = `Bearer ${cleanTok}`;
+        remoteHeaders["x-access-token"] = cleanTok;
+
+        for (const targetId of targetIds.slice(0, 3)) {
+          const remoteRes = await fetch("https://abms-lkw9.onrender.com/class/attendance/lookup", {
+            method: "POST",
+            headers: remoteHeaders,
+            body: JSON.stringify({ studentID: targetId, date: cleanDateFilter || undefined }),
+            signal: AbortSignal.timeout(3500)
+          }).catch(() => null);
+
+          if (remoteRes && remoteRes.ok) {
+            const remoteData = await remoteRes.json().catch(() => null);
+            if (Array.isArray(remoteData)) {
+              remoteData.forEach(d => {
+                const sId = String(d.studentID || d.student_id || targetId);
+                const dateStr = formatToYMD(d.date || d.attendanceDate);
+                if (dateStr) {
+                  const key = `${sId.toLowerCase()}_${dateStr}`;
+                  if (!matchesMap.has(key)) {
+                    matchesMap.set(key, {
+                      ...d,
+                      studentID: sId,
+                      student_id: sId,
+                      date: dateStr,
+                      attendanceDate: dateStr,
+                      attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
+                      status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
+                    });
+                  }
+                }
+              });
+            }
+          }
+        }
+      } catch (err) {
+        // silent
+      }
+    }
+
+    const matches = Array.from(matchesMap.values());
     res.json(matches);
   };
 
@@ -1934,6 +1982,7 @@ async function startServer() {
     const body = req.body || {};
     const query = req.query || {};
     const data = { ...query, ...body };
+    const authHeader = req.headers.authorization || req.headers["x-access-token"] || data.token || "";
 
     const rawIds = data.studentIDs || data.studentID || data.studentId || data.student_id || data.reg_no || data.id || data._id;
     let targetIds: string[] = [];
@@ -1962,13 +2011,12 @@ async function startServer() {
     }
     prefixes = Array.from(new Set(prefixes));
 
-    let matches: any[] = [];
-    let isMongoConnected = false;
+    const matchesMap = new Map<string, any>();
 
+    // 1. Query MongoDB Atlas attendances collection
     try {
       const mongo = await getMongoDb();
       if (mongo) {
-        isMongoConnected = true;
         const expandedTokensSet = await expandStudentTokens(mongo, targetIds);
         const tokenList = Array.from(expandedTokensSet);
 
@@ -2007,35 +2055,28 @@ async function startServer() {
 
         let docs = await mongo.collection("attendances").find(filter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
         if (docs && docs.length > 0) {
-          console.log("[MongoDB Student Month Lookup] Found docs:", docs.length);
-          matches = docs.map(d => ({
-            ...d,
-            studentID: String(d.studentID || d.student_id || d.studentId || ""),
-            date: formatToYMD(d.date || d.attendanceDate || d.attendance_date),
-            attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
-            status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
-          }));
-        } else {
-          // Fallback query if specific student match yielded 0 records
-          const fallbackFilter = prefixes.length > 0 ? { $or: buildDateFilterConditions(prefixes) } : {};
-          let fallbackDocs = await mongo.collection("attendances").find(fallbackFilter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
-          if (fallbackDocs && fallbackDocs.length > 0) {
-            console.log("[MongoDB Student Month Lookup] Fallback found docs:", fallbackDocs.length);
-            matches = fallbackDocs.map(d => ({
+          docs.forEach(d => {
+            const sId = String(d.studentID || d.student_id || d.studentId || d.reg_no || d.id || d._id || "");
+            const dateStr = formatToYMD(d.date || d.attendanceDate || d.attendance_date);
+            const key = `${sId.toLowerCase()}_${dateStr}`;
+            matchesMap.set(key, {
               ...d,
-              studentID: String(d.studentID || d.student_id || d.studentId || ""),
-              date: formatToYMD(d.date || d.attendanceDate || d.attendance_date),
+              studentID: sId,
+              student_id: sId,
+              date: dateStr,
+              attendanceDate: dateStr,
               attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
               status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
-            }));
-          }
+            });
+          });
         }
       }
     } catch (err) {
       console.warn("[MongoDB Student Month Lookup] Warning:", err);
     }
 
-    if (!isMongoConnected) {
+    // 2. Query Local JSON Database
+    try {
       const db = loadDb();
       const attList = db.student_attendance || [];
       if (targetIds.length > 0) {
@@ -2047,24 +2088,80 @@ async function startServer() {
 
           const matchesId = targetLower.some(tId => itemTokens.includes(tId));
           if (!matchesId) return false;
-          if (prefix) {
+          if (prefixes && prefixes.length > 0) {
             const recDate = formatToYMD(a.date || a.attendanceDate);
-            return recDate.startsWith(prefix);
+            return prefixes.some((p: string) => recDate.startsWith(p));
           }
           return true;
         });
 
         localMatches.forEach(lm => {
-          const lmDate = formatToYMD(lm.date || lm.attendanceDate);
-          const lmSId = String(lm.studentID || lm.student_id || "").toLowerCase();
-          const exists = matches.some(m => String(m.studentID || m.student_id || "").toLowerCase() === lmSId && formatToYMD(m.date) === lmDate);
-          if (!exists) {
-            matches.push(lm);
+          const sId = String(lm.studentID || lm.student_id || lm.studentId || lm.reg_no || lm.id || lm._id || "");
+          const dateStr = formatToYMD(lm.date || lm.attendanceDate);
+          const key = `${sId.toLowerCase()}_${dateStr}`;
+          if (!matchesMap.has(key)) {
+            matchesMap.set(key, {
+              ...lm,
+              studentID: sId,
+              student_id: sId,
+              date: dateStr,
+              attendanceDate: dateStr,
+              attended: lm.attended === true || lm.attended === "true" || String(lm.status).toLowerCase() === "present" || String(lm.status).toLowerCase() === "late",
+              status: (lm.attended === true || lm.attended === "true" || String(lm.status).toLowerCase() === "present" || String(lm.status).toLowerCase() === "late") ? (String(lm.status).toLowerCase() === "late" ? "late" : "present") : "absent"
+            });
           }
         });
       }
+    } catch (err) {
+      console.warn("[Local JSON Student Month Lookup] Warning:", err);
     }
 
+    // 3. Fallback Remote Proxy to https://abms-lkw9.onrender.com
+    if (targetIds.length > 0 && authHeader) {
+      try {
+        const remoteHeaders: Record<string, string> = { "Content-Type": "application/json" };
+        const cleanTok = authHeader.replace(/^Bearer\s+/i, "").trim();
+        remoteHeaders["Authorization"] = `Bearer ${cleanTok}`;
+        remoteHeaders["x-access-token"] = cleanTok;
+
+        for (const targetId of targetIds.slice(0, 3)) {
+          const remoteRes = await fetch("https://abms-lkw9.onrender.com/class/attendance/lookup", {
+            method: "POST",
+            headers: remoteHeaders,
+            body: JSON.stringify({ studentID: targetId }),
+            signal: AbortSignal.timeout(3500)
+          }).catch(() => null);
+
+          if (remoteRes && remoteRes.ok) {
+            const remoteData = await remoteRes.json().catch(() => null);
+            if (Array.isArray(remoteData)) {
+              remoteData.forEach(d => {
+                const sId = String(d.studentID || d.student_id || targetId);
+                const dateStr = formatToYMD(d.date || d.attendanceDate);
+                if (dateStr) {
+                  const key = `${sId.toLowerCase()}_${dateStr}`;
+                  if (!matchesMap.has(key)) {
+                    matchesMap.set(key, {
+                      ...d,
+                      studentID: sId,
+                      student_id: sId,
+                      date: dateStr,
+                      attendanceDate: dateStr,
+                      attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
+                      status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
+                    });
+                  }
+                }
+              });
+            }
+          }
+        }
+      } catch (err) {
+        // silent
+      }
+    }
+
+    const matches = Array.from(matchesMap.values());
     res.json(matches);
   };
 
