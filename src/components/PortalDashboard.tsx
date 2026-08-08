@@ -2431,7 +2431,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
             body: JSON.stringify({ name: "class_id", value: selectedTeacherClassId })
           });
           if (Array.isArray(relations)) {
-            studentIds = relations.map(r => r.student_id).filter(Boolean);
+            studentIds = Array.from(new Set(relations.map(r => String(r.student_id || "").trim()).filter(Boolean)));
           }
         } catch (err) {
           console.warn("Could not load student class mappings", err);
@@ -2472,11 +2472,25 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           }
         }
 
+        // Deduplicate rawStudents by ID/reg_no/name
+        const uniqueRaw: any[] = [];
+        const seenRaw = new Set<string>();
+        for (const st of rawStudents) {
+          const sId = String(st._id || st.id || "").trim().toLowerCase();
+          const sName = String(st.name || `${st.first_name || ""} ${st.last_name || ""}`).trim().toLowerCase();
+          const sRoll = String(st.reg_no || st.nic || st.phone || st.rollNo || "").trim().toLowerCase();
+          const k = sId ? `id_${sId}` : `name_${sName}_roll_${sRoll}`;
+          if (!seenRaw.has(k)) {
+            seenRaw.add(k);
+            uniqueRaw.push(st);
+          }
+        }
+
         // 3. Look up attendance for each student for the selected date from MongoDB /class/attendance/lookup
         const mappedRoster = await Promise.all(
-          rawStudents.map(async (student) => {
+          uniqueRaw.map(async (student) => {
             const studentId = student._id || student.id;
-            const fullName = [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ") || "Student";
+            const fullName = [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ") || student.name || "Student";
             const rollNo = student.reg_no || student.nic || student.phone || "N/A";
 
             let currentStatus: "present" | "absent" | "late" | null = null;
@@ -2509,9 +2523,23 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           })
         );
 
+        // Deduplicate mappedRoster as well
+        const uniqueMappedRoster: typeof mappedRoster = [];
+        const seenMapped = new Set<string>();
+        for (const item of mappedRoster) {
+          const sId = String(item.id || "").trim().toLowerCase();
+          const sName = String(item.name || "").trim().toLowerCase();
+          const sRoll = String(item.rollNo || "").trim().toLowerCase();
+          const k = sId ? `id_${sId}` : `name_${sName}_roll_${sRoll}`;
+          if (!seenMapped.has(k)) {
+            seenMapped.add(k);
+            uniqueMappedRoster.push(item);
+          }
+        }
+
         setStudentsAttendance(prev => ({
           ...prev,
-          [selectedTeacherClassId]: mappedRoster
+          [selectedTeacherClassId]: uniqueMappedRoster
         }));
 
       } catch (err) {
@@ -5701,53 +5729,60 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                   </div>
 
                   {/* Search and Counts bar */}
-                  <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-900/30 border border-slate-900 rounded-2xl p-3">
-                    <div className="relative w-full sm:w-72">
-                      <input
-                        type="text"
-                        placeholder="Search student by name or roll number..."
-                        value={studentSearchQuery}
-                        onChange={(e) => setStudentSearchQuery(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-900/80 rounded-xl pl-3 pr-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors font-medium"
-                      />
-                    </div>
-                    <div className="text-[10px] font-mono text-slate-500 self-end sm:self-auto flex items-center gap-2">
-                      <span>Total Enrolled: <strong className="text-slate-300 font-bold">{studentsAttendance[selectedTeacherClassId]?.length || 0}</strong></span>
-                      <span className="text-slate-800">|</span>
-                      <span>Showing: <strong className="text-indigo-400 font-bold">{
-                        (studentsAttendance[selectedTeacherClassId] || []).filter(s => 
-                          s.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
-                          s.rollNo.toLowerCase().includes(studentSearchQuery.toLowerCase())
-                        ).length
-                      }</strong></span>
-                    </div>
-                  </div>
-
-                  {/* Grid layout of Students */}
-                  <div className="divide-y divide-slate-900/60 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                    {(() => {
-                      const roster = studentsAttendance[selectedTeacherClassId] || [];
-                      const filtered = roster.filter(s => 
-                        s.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
-                        s.rollNo.toLowerCase().includes(studentSearchQuery.toLowerCase())
-                      );
-                      
-                      if (filtered.length === 0) {
-                        return (
-                          <div className="py-12 text-center text-xs text-slate-500 font-mono">
-                            {roster.length === 0 ? "No student roster records found for this class section." : "No matching student roster records found."}
-                          </div>
-                        );
+                  {(() => {
+                    const rawRoster = studentsAttendance[selectedTeacherClassId] || [];
+                    const uniqueRoster: typeof rawRoster = [];
+                    const seenRosterKeys = new Set<string>();
+                    for (const s of rawRoster) {
+                      const sId = String(s.id || "").trim().toLowerCase();
+                      const sName = String(s.name || "").trim().toLowerCase();
+                      const sRoll = String(s.rollNo || "").trim().toLowerCase();
+                      const k = sId ? `id_${sId}` : `name_${sName}_roll_${sRoll}`;
+                      if (!seenRosterKeys.has(k)) {
+                        seenRosterKeys.add(k);
+                        uniqueRoster.push(s);
                       }
+                    }
 
-                      return filtered.map((student, idx) => {
-                        const initials = student.name
-                          .split(" ")
-                          .map(n => n[0])
-                          .join("");
-                        
-                        return (
-                          <div key={`attst-${student.id || student._id || 'st'}-${idx}`} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    const filtered = uniqueRoster.filter(s => 
+                      s.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                      s.rollNo.toLowerCase().includes(studentSearchQuery.toLowerCase())
+                    );
+
+                    return (
+                      <>
+                        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-900/30 border border-slate-900 rounded-2xl p-3">
+                          <div className="relative w-full sm:w-72">
+                            <input
+                              type="text"
+                              placeholder="Search student by name or roll number..."
+                              value={studentSearchQuery}
+                              onChange={(e) => setStudentSearchQuery(e.target.value)}
+                              className="w-full bg-slate-950 border border-slate-900/80 rounded-xl pl-3 pr-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors font-medium"
+                            />
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-500 self-end sm:self-auto flex items-center gap-2">
+                            <span>Total Enrolled: <strong className="text-slate-300 font-bold">{uniqueRoster.length}</strong></span>
+                            <span className="text-slate-800">|</span>
+                            <span>Showing: <strong className="text-indigo-400 font-bold">{filtered.length}</strong></span>
+                          </div>
+                        </div>
+
+                        {/* Grid layout of Students */}
+                        <div className="divide-y divide-slate-900/60 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                          {filtered.length === 0 ? (
+                            <div className="py-12 text-center text-xs text-slate-500 font-mono">
+                              {uniqueRoster.length === 0 ? "No student roster records found for this class section." : "No matching student roster records found."}
+                            </div>
+                          ) : (
+                            filtered.map((student, idx) => {
+                              const initials = student.name
+                                .split(" ")
+                                .map(n => n[0])
+                                .join("");
+                              
+                              return (
+                                <div key={`attst-${student.id || student._id || 'st'}-${idx}`} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             {/* Student Name and Metadata */}
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-xs font-bold text-slate-300 font-mono">
@@ -5789,9 +5824,12 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                             </div>
                           </div>
                         );
-                      });
-                    })()}
+                      })
+                    )}
                   </div>
+                      </>
+                    );
+                  })()}
 
                   {/* Save Button action bar */}
                   <div className="pt-4 border-t border-slate-900 flex justify-center">

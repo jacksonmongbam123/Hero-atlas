@@ -578,7 +578,7 @@ async function fetchRemoteStudents(token: string, classId: string, sectionName?:
 
     const rawStudents = await db.collection("m_students").find(studentQuery).limit(200).toArray();
     if (rawStudents.length > 0) {
-      return rawStudents.map((s: any) => {
+      const mapped = rawStudents.map((s: any) => {
         const sId = String(s._id || s.id || s.student_id || s.nic);
         const firstName = s.first_name || s.name || "Student";
         const lastName = s.last_name || "";
@@ -599,6 +599,20 @@ async function fetchRemoteStudents(token: string, classId: string, sectionName?:
           email: s.email || ""
         };
       });
+
+      const uniqueStudents: typeof mapped = [];
+      const seenKeys = new Set<string>();
+      for (const st of mapped) {
+        const idKey = String(st.id || "").trim().toLowerCase();
+        const nameKey = String(st.name || "").trim().toLowerCase();
+        const rollKey = String(st.rollNo || "").trim().toLowerCase();
+        const key = idKey ? `id_${idKey}` : `name_${nameKey}_roll_${rollKey}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          uniqueStudents.push(st);
+        }
+      }
+      return uniqueStudents;
     }
   } catch (err) {
     console.warn("[MongoDB Students Fetch] Failed:", err);
@@ -1219,7 +1233,19 @@ async function startServer() {
               email: s.email || ""
             };
           });
-          return res.json(mapped);
+          const uniqueMapped: typeof mapped = [];
+          const seenKeys = new Set<string>();
+          for (const item of mapped) {
+            const idKey = String(item.id || item._id || "").trim().toLowerCase();
+            const nameKey = String(item.name || "").trim().toLowerCase();
+            const rollKey = String(item.reg_no || "").trim().toLowerCase();
+            const key = idKey ? `id_${idKey}` : `name_${nameKey}_roll_${rollKey}`;
+            if (!seenKeys.has(key)) {
+              seenKeys.add(key);
+              uniqueMapped.push(item);
+            }
+          }
+          return res.json(uniqueMapped);
         }
       }
     } catch (err) {
