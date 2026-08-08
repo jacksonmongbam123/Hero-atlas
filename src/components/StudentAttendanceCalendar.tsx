@@ -1,0 +1,704 @@
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import {
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  TrendingUp,
+  CheckCircle,
+  AlertCircle,
+  CalendarDays
+} from "lucide-react";
+
+const EMPTY_ARRAY: any[] = [];
+
+// Fallback fetch helper prioritizing remote API endpoints (e.g., https://abms-lkw9.onrender.com) then local origin
+const getStoredToken = (): string => {
+  try {
+    return localStorage.getItem("token") || localStorage.getItem("authToken") || localStorage.getItem("userToken") || "";
+  } catch {
+    return "";
+  }
+};
+
+async function fetchWithFallback(path: string, options?: RequestInit): Promise<any> {
+  const candidates = [
+    "",
+    typeof window !== "undefined" ? window.location.origin : "",
+    "https://abms-lkw9.onrender.com",
+    "https://abms-lkw9.onrender.com/api"
+  ];
+
+  const rawToken = (options?.headers as any)?.Authorization || (options?.headers as any)?.authorization || getStoredToken();
+  const authHeader = rawToken ? (rawToken.startsWith("Bearer ") ? rawToken : `Bearer ${rawToken}`) : "";
+
+  const combinedRecords: any[] = [];
+  let successObject: any = null;
+
+  for (const baseUrl of candidates) {
+    try {
+      const cleanPath = path.startsWith("/") ? path : `/${path}`;
+      let url = "";
+      if (baseUrl) {
+        if (baseUrl.endsWith("/api") && cleanPath.startsWith("/api/")) {
+          url = `${baseUrl.slice(0, -4)}${cleanPath}`;
+        } else {
+          url = `${baseUrl}${cleanPath}`;
+        }
+      } else {
+        url = cleanPath.startsWith("/api/") ? cleanPath : `/api${cleanPath}`;
+      }
+
+      const mergedHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        ...(options?.headers as any)
+      };
+      if (authHeader && !mergedHeaders["Authorization"] && !mergedHeaders["authorization"]) {
+        mergedHeaders["Authorization"] = authHeader;
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+
+      const response = await fetch(url, {
+        cache: "no-store",
+        signal: controller.signal,
+        ...options,
+        headers: mergedHeaders
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const contentType = response.headers.get("content-type") || "";
+        const text = await response.text();
+        if (text && !contentType.includes("html") && !text.trim().startsWith("<!") && !text.trim().startsWith("<html")) {
+          try {
+            const parsed = JSON.parse(text);
+            if (Array.isArray(parsed)) {
+              if (parsed.length > 0) {
+                combinedRecords.push(...parsed);
+                break;
+              }
+            } else if (parsed && typeof parsed === "object") {
+              const list = parsed.records || parsed.data || parsed.attendance || parsed.results || parsed.logs;
+              if (Array.isArray(list) && list.length > 0) {
+                combinedRecords.push(...list);
+                break;
+              } else if (!successObject) {
+                successObject = parsed;
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch (err) {
+      // continue to next candidate
+    }
+  }
+
+  if (combinedRecords.length > 0) {
+    return combinedRecords;
+  }
+  if (successObject) {
+    return successObject;
+  }
+  return [];
+}
+
+export function StudentAttendanceCalendar({
+  user,
+  parentUser,
+  isDark,
+  token,
+  organizationClasses = EMPTY_ARRAY,
+  teacherClasses = EMPTY_ARRAY,
+  timetableItems = EMPTY_ARRAY,
+  timetableSubjects = EMPTY_ARRAY,
+  timetableTeachers = EMPTY_ARRAY,
+  organizationDetails
+}: {
+  user: any;
+  parentUser?: any;
+  isDark: boolean;
+  token?: string;
+  organizationClasses?: any[];
+  teacherClasses?: any[];
+  timetableItems?: any[];
+  timetableSubjects?: any[];
+  timetableTeachers?: any[];
+  organizationDetails?: any;
+}) {
+  const today = new Date();
+  const [selectedYear, setSelectedYear] = useState<number>(today.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number>(today.getMonth()); // 0-indexed
+  const [attendanceMap, setAttendanceMap] = useState<Record<string, "present" | "absent" | "late">>({});
+  const [loading, setLoading] = useState<boolean>(false);
+
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  const years = Array.from({ length: 8 }, (_, i) => 2023 + i);
+
+  // Student identification tokens (collects both custom studentID e.g. "4678" AND MongoDB _id/id e.g. "6a5cf221dd10dd1d4c38f0e2")
+  const studentTokens = useMemo(() => {
+    const set = new Set<string>();
+
+    const collectFromObject = (obj: any) => {
+      if (!obj || typeof obj !== "object") return;
+      [
+        obj.studentID,
+        obj.student_id,
+        obj.studentId,
+        obj.id,
+        obj._id,
+        obj.reg_no,
+        obj.rollNo,
+        obj.username,
+        obj.phone,
+        obj.email,
+        obj.user_id,
+        obj.user_type_id,
+        obj.nic,
+        obj.passport,
+        obj.first_name,
+        obj.last_name,
+        obj.name
+      ].forEach(val => {
+        if (val !== undefined && val !== null) {
+          const s = String(val).trim();
+          if (s && s !== "undefined" && s !== "null" && s !== "[object Object]") {
+            set.add(s);
+          }
+        }
+      });
+    };
+
+    collectFromObject(user);
+    collectFromObject(parentUser);
+
+    if (user && Array.isArray(user.students)) {
+      user.students.forEach((s: any) => {
+        if (typeof s === "object") collectFromObject(s);
+        else if (s) set.add(String(s).trim());
+      });
+    }
+
+    if (user && Array.isArray(user.children)) {
+      user.children.forEach((c: any) => {
+        if (typeof c === "object") collectFromObject(c);
+        else if (c) set.add(String(c).trim());
+      });
+    }
+
+    if (parentUser && Array.isArray(parentUser.children)) {
+      parentUser.children.forEach((c: any) => {
+        if (typeof c === "object") collectFromObject(c);
+        else if (c) set.add(String(c).trim());
+      });
+    }
+
+    return Array.from(set);
+  }, [user, parentUser]);
+
+  const primaryStudentId = studentTokens[0] || user?.id || user?._id || user?.nic || "";
+
+  // Fetch attendance for the selected year and month strictly from database
+  const fetchMonthAttendance = useCallback(async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
+    const newMap: Record<string, "present" | "absent" | "late"> = {};
+
+    const rawToken = token || user?.token || "";
+    const authToken = rawToken ? (rawToken.startsWith("Bearer ") ? rawToken : `Bearer ${rawToken}`) : "";
+
+    const fetchTokens = studentTokens;
+
+    // Helper to apply status to date
+    const applyRecord = (rec: any) => {
+      if (!rec) return;
+      const recSId = String(
+        rec.studentID || rec.student_id || rec.studentId || rec.student || rec.reg_no || rec.user_id || rec.id || rec._id || ""
+      ).trim().toLowerCase();
+      
+      const matchesToken = fetchTokens.length === 0 ? true : fetchTokens.some(t => {
+        const lowerT = t.toLowerCase();
+        return lowerT === recSId || recSId === lowerT || recSId.includes(lowerT) || lowerT.includes(recSId);
+      });
+
+      if (matchesToken) {
+        const rawDate = rec.date || rec.attendanceDate || rec.attendance_date;
+        let dateStr = "";
+        if (rawDate instanceof Date) {
+          dateStr = rawDate.toISOString().split("T")[0];
+        } else {
+          const s = String(rawDate || "").trim();
+          dateStr = s.includes("T") ? s.split("T")[0] : s.slice(0, 10);
+        }
+
+        if (dateStr && dateStr.length >= 10) {
+          const isPresent = rec.attended === true || rec.attended === "true" || String(rec.status).toLowerCase() === "present" || String(rec.status).toLowerCase() === "late" || String(rec.status).toLowerCase() === "p";
+          const isLate = String(rec.status).toLowerCase() === "late";
+
+          if (isPresent) {
+            newMap[dateStr] = isLate ? "late" : "present";
+          } else if (rec.attended === false || rec.attended === "false" || String(rec.status).toLowerCase() === "absent") {
+            newMap[dateStr] = "absent";
+          }
+        }
+      }
+    };
+
+    const sortRecordsByTimestamp = (arr: any[]) => {
+      if (!Array.isArray(arr)) return [];
+      return [...arr].sort((a, b) => {
+        const timeA = new Date(a.updatedAt || a.createdAt || a.date || a.timestamp || 0).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt || b.date || b.timestamp || 0).getTime();
+        return timeA - timeB;
+      });
+    };
+
+    try {
+      // 1. Fetch from local backend /api/attendance/student_month passing all tokens (primary source connected to MongoDB attendances schema)
+      try {
+        const records = await fetchWithFallback("/attendance/student_month", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentIDs: fetchTokens,
+            studentID: primaryStudentId,
+            year: selectedYear,
+            month: selectedMonth
+          })
+        }).catch(() => null);
+
+        let list: any[] = [];
+        if (Array.isArray(records)) {
+          list = records;
+        } else if (records && Array.isArray(records.records)) {
+          list = records.records;
+        } else if (records && Array.isArray(records.data)) {
+          list = records.data;
+        }
+
+        sortRecordsByTimestamp(list).forEach((r: any) => applyRecord(r));
+      } catch (err) {
+        console.warn("Local month attendance fetch warning:", err);
+      }
+
+      // 2. Fetch local lookup for student ID tokens
+      try {
+        const records = await fetchWithFallback("/class/attendance/lookup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentIDs: fetchTokens,
+            studentID: primaryStudentId,
+            year: selectedYear,
+            month: selectedMonth
+          })
+        }).catch(() => null);
+
+        let list: any[] = [];
+        if (Array.isArray(records)) {
+          list = records;
+        } else if (records && Array.isArray(records.records)) {
+          list = records.records;
+        }
+
+        sortRecordsByTimestamp(list).forEach((r: any) => applyRecord(r));
+      } catch (err) {
+        console.warn("Local lookup fetch warning:", err);
+      }
+
+      setAttendanceMap(prev => {
+        const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+        Object.entries(prev).forEach(([d, status]) => {
+          if (d.startsWith(monthPrefix) && status && !newMap[d]) {
+            newMap[d] = status as "present" | "absent" | "late";
+          }
+        });
+
+        const prevKeys = Object.keys(prev);
+        const newKeys = Object.keys(newMap);
+        if (prevKeys.length === newKeys.length) {
+          const hasChanged = newKeys.some(k => prev[k] !== newMap[k]);
+          if (!hasChanged) {
+            return prev;
+          }
+        }
+        return { ...newMap };
+      });
+    } catch (err) {
+      console.error("Error fetching month attendance:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedYear, selectedMonth, primaryStudentId, token, user, studentTokens]);
+
+  const fetchMonthAttendanceRef = useRef(fetchMonthAttendance);
+  useEffect(() => {
+    fetchMonthAttendanceRef.current = fetchMonthAttendance;
+  });
+
+  useEffect(() => {
+    // Initial mount or month change fetch
+    fetchMonthAttendanceRef.current(false);
+
+    const triggerBackgroundFetch = () => {
+      fetchMonthAttendanceRef.current(true);
+    };
+
+    // Fast 2s background polling for real-time live synchronization with MongoDB Atlas
+    const interval = setInterval(triggerBackgroundFetch, 2000);
+
+    // Instant update on custom event, focus, or visibility change
+    const handleImmediateUpdate = () => {
+      fetchMonthAttendanceRef.current(false);
+    };
+
+    window.addEventListener("attendance_updated", handleImmediateUpdate);
+    window.addEventListener("focus", handleImmediateUpdate);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") handleImmediateUpdate();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("attendance_updated", handleImmediateUpdate);
+      window.removeEventListener("focus", handleImmediateUpdate);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [selectedYear, selectedMonth, primaryStudentId]);
+
+  const handlePrevMonth = () => {
+    if (selectedMonth === 0) {
+      setSelectedMonth(11);
+      setSelectedYear(prev => prev - 1);
+    } else {
+      setSelectedMonth(prev => prev - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (selectedMonth === 11) {
+      setSelectedMonth(0);
+      setSelectedYear(prev => prev + 1);
+    } else {
+      setSelectedMonth(prev => prev + 1);
+    }
+  };
+
+  const handleDayClick = async (dateStr: string) => {
+    const currentStatus = attendanceMap[dateStr];
+    let nextStatus: "present" | "absent" | "late" = "present";
+    if (currentStatus === "present") nextStatus = "absent";
+    else if (currentStatus === "absent") nextStatus = "late";
+    else if (currentStatus === "late") nextStatus = "present";
+
+    // 1. Optimistic UI state update
+    setAttendanceMap(prev => ({
+      ...prev,
+      [dateStr]: nextStatus
+    }));
+
+    // 2. Persist to MongoDB Atlas via backend API
+    const authToken = token || user?.token || "";
+    const primaryId = primaryStudentId || "S101";
+    try {
+      await fetchWithFallback("/class/attendance/add", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": authToken ? (authToken.startsWith("Bearer ") ? authToken : `Bearer ${authToken}`) : ""
+        },
+        body: JSON.stringify({
+          studentID: primaryId,
+          studentIDs: studentTokens,
+          date: dateStr,
+          attended: nextStatus === "present" || nextStatus === "late",
+          status: nextStatus
+        })
+      });
+      window.dispatchEvent(new Event("attendance_updated"));
+    } catch (e) {
+      console.warn("Day status toggle error:", e);
+    }
+  };
+
+  const handleToday = () => {
+    const now = new Date();
+    setSelectedYear(now.getFullYear());
+    setSelectedMonth(now.getMonth());
+  };
+
+  // Calendar calculations
+  const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+  const firstDayWeekday = new Date(selectedYear, selectedMonth, 1).getDay(); // 0 = Sun, 1 = Mon ...
+
+  // Calculate statistics for current month strictly from real database records in attendanceMap
+  let presentCount = 0;
+  let absentCount = 0;
+  let totalLogged = 0;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const st = attendanceMap[dateStr];
+    if (st === "present" || st === "late") {
+      presentCount++;
+      totalLogged++;
+    } else if (st === "absent") {
+      absentCount++;
+      totalLogged++;
+    }
+  }
+
+  const attendancePercentage = totalLogged > 0 ? ((presentCount / totalLogged) * 100).toFixed(1) : "100.0";
+
+  return (
+    <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 backdrop-blur-sm space-y-6 shadow-xl">
+      {/* Calendar Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+        <div>
+          <h3 className="text-sm font-black uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+            <Calendar className="w-4 h-4" /> Monthly Attendance Registry
+          </h3>
+          <p className="text-[11px] text-slate-400 mt-1">
+            Tracking verified attendance history for <span className="text-slate-200 font-medium">{user?.name || user?.username || "Student"}</span> ({primaryStudentId})
+          </p>
+        </div>
+
+        {/* Control Buttons */}
+        <div className="flex flex-col items-start sm:items-end gap-3">
+          {/* Month/Year Selection Controls */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handlePrevMonth}
+              title="Previous Month"
+              className="p-2 bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/60 rounded-xl transition-colors cursor-pointer"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              className="bg-slate-800/80 border border-slate-700/60 text-slate-200 text-xs font-semibold rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            >
+              {months.map((m, idx) => (
+                <option key={m} value={idx}>{m}</option>
+              ))}
+            </select>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="bg-slate-800/80 border border-slate-700/60 text-slate-200 text-xs font-semibold rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 cursor-pointer font-mono"
+            >
+              {years.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleNextMonth}
+              title="Next Month"
+              className="p-2 bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/60 rounded-xl transition-colors cursor-pointer"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Today & Refresh Buttons Below */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleToday}
+              className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Today</span>
+            </button>
+            <button
+              type="button"
+              onClick={fetchMonthAttendance}
+              disabled={loading}
+              title="Refresh Attendance"
+              className="px-3 py-1.5 bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/60 text-xs font-semibold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Redesigned Stat Summary Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {/* Attendance Rate Card */}
+        <div className="bg-slate-950/60 border border-indigo-500/20 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden group hover:border-indigo-500/40 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-indigo-300 uppercase tracking-wider font-semibold">Attendance Rate</span>
+            <div className="w-7 h-7 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+              <TrendingUp className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-2.5 flex items-baseline">
+            <span className="text-2xl font-black text-slate-100 font-mono tracking-tight">{attendancePercentage}%</span>
+          </div>
+          <div className="w-full bg-slate-900 h-1.5 rounded-full mt-3 overflow-hidden border border-indigo-500/10">
+            <div 
+              className="bg-indigo-500 h-full rounded-full transition-all duration-500"
+              style={{ width: `${Math.min(100, Math.max(0, Number(attendancePercentage) || 0))}%` }}
+            ></div>
+          </div>
+        </div>
+
+        {/* Present Card */}
+        <div className="bg-slate-950/60 border border-emerald-500/20 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden group hover:border-emerald-500/40 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-emerald-400 uppercase tracking-wider font-semibold">Present</span>
+            <div className="w-7 h-7 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+              <CheckCircle className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-2.5 flex items-baseline gap-1">
+            <span className="text-2xl font-black text-emerald-400 font-mono tracking-tight">{presentCount}</span>
+            <span className="text-xs text-slate-400 font-medium">Days</span>
+          </div>
+          <div className="w-full bg-emerald-950/40 border border-emerald-500/10 h-1.5 rounded-full mt-3 overflow-hidden">
+            <div 
+              className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+              style={{ width: totalLogged > 0 ? `${(presentCount / totalLogged) * 100}%` : '0%' }}
+            ></div>
+          </div>
+        </div>
+
+        {/* Absent Card */}
+        <div className="bg-slate-950/60 border border-rose-500/20 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden group hover:border-rose-500/40 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-rose-400 uppercase tracking-wider font-semibold">Absent</span>
+            <div className="w-7 h-7 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
+              <AlertCircle className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-2.5 flex items-baseline gap-1">
+            <span className="text-2xl font-black text-rose-400 font-mono tracking-tight">{absentCount}</span>
+            <span className="text-xs text-slate-400 font-medium">Days</span>
+          </div>
+          <div className="w-full bg-rose-950/40 border border-rose-500/10 h-1.5 rounded-full mt-3 overflow-hidden">
+            <div 
+              className="bg-rose-500 h-full rounded-full transition-all duration-500"
+              style={{ width: totalLogged > 0 ? `${(absentCount / totalLogged) * 100}%` : '0%' }}
+            ></div>
+          </div>
+        </div>
+
+        {/* Total Logged Card */}
+        <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden group hover:border-slate-700 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Total Logged</span>
+            <div className="w-7 h-7 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 shrink-0">
+              <CalendarDays className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-2.5 flex items-baseline gap-1">
+            <span className="text-2xl font-black text-slate-100 font-mono tracking-tight">{totalLogged}</span>
+            <span className="text-xs text-slate-400 font-medium">Days</span>
+          </div>
+          <div className="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden border border-slate-700/50">
+            <div className="bg-slate-400 h-full rounded-full w-full"></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Simple Calendar Grid */}
+      <div className="space-y-2">
+        {/* Day of Week Labels */}
+        <div className="grid grid-cols-7 gap-2 text-center">
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((dayName, idx) => (
+            <div
+              key={dayName}
+              className={`text-xs font-semibold py-1 ${
+                idx === 0 || idx === 6 ? "text-slate-500" : "text-slate-400"
+              }`}
+            >
+              {dayName}
+            </div>
+          ))}
+        </div>
+
+        {/* Days Grid */}
+        <div className="grid grid-cols-7 gap-2">
+          {/* Empty offset days */}
+          {Array.from({ length: firstDayWeekday }).map((_, idx) => (
+            <div key={`empty-${idx}`} className="aspect-square rounded-none bg-slate-950/20 border border-slate-900/40 opacity-20"></div>
+          ))}
+
+          {/* Days of Month */}
+          {Array.from({ length: daysInMonth }).map((_, idx) => {
+            const dayNum = idx + 1;
+            const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
+            const weekday = (firstDayWeekday + idx) % 7;
+            const isWeekend = weekday === 0 || weekday === 6;
+            const isToday =
+              today.getFullYear() === selectedYear &&
+              today.getMonth() === selectedMonth &&
+              today.getDate() === dayNum;
+
+            const status = attendanceMap[dateStr];
+
+            return (
+              <div
+                key={dateStr}
+                onClick={() => handleDayClick(dateStr)}
+                title={`Click to toggle status for ${dateStr} (Current: ${status || "None"})`}
+                className="aspect-square p-0 flex flex-col justify-between relative select-none bg-slate-950/40 border border-slate-800/60 rounded-xl overflow-hidden hover:border-indigo-500/50 active:scale-95 transition-all cursor-pointer group"
+              >
+                {/* Small Date Number */}
+                <div className="w-full flex items-center justify-between text-xs font-semibold font-mono pt-1.5 px-2">
+                  <span className={isToday ? "text-indigo-400 font-bold" : isWeekend ? "text-slate-500" : "text-slate-300"}>
+                    {dayNum}
+                  </span>
+                  {isToday && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" title="Today"></span>
+                  )}
+                </div>
+
+                {/* Thin Barline at bottom of date */}
+                <div className="w-full flex justify-center items-end mt-auto">
+                  {status === "present" ? (
+                    <div className="w-full h-1 bg-emerald-500 rounded-none" title="Present"></div>
+                  ) : status === "absent" ? (
+                    <div className="w-full h-1 bg-rose-500 rounded-none" title="Absent"></div>
+                  ) : status === "late" ? (
+                    <div className="w-full h-1 bg-amber-500 rounded-none" title="Late"></div>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Minimal Footer Legend */}
+      <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800/60 text-xs text-slate-400">
+        <div className="flex items-center gap-4">
+          <span className="flex items-center gap-1.5 font-medium">
+            <span className="w-2.5 h-1 bg-emerald-500 rounded-sm"></span> Present
+          </span>
+          <span className="flex items-center gap-1.5 font-medium">
+            <span className="w-2.5 h-1 bg-rose-500 rounded-sm"></span> Absent
+          </span>
+          <span className="flex items-center gap-1.5 font-medium">
+            <span className="w-2.5 h-1 bg-amber-500 rounded-sm"></span> Late
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default StudentAttendanceCalendar;
