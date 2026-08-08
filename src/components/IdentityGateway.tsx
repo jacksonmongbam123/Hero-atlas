@@ -11,7 +11,6 @@ import {
   Loader2 
 } from "lucide-react";
 import { motion } from "motion/react";
-import { fetchWithFallback, getApiUrl } from "../utils/apiUrl";
 
 interface IdentityGatewayProps {
   theme: "light" | "dark";
@@ -57,11 +56,11 @@ export default function IdentityGateway({ theme, onToggleTheme, onSuccess }: Ide
 
     try {
       const loginUrls = [
-        getApiUrl("/login"),
-        getApiUrl("/api/login"),
         "/api/login",
-        "/login"
-      ].filter((v, i, a) => v && a.indexOf(v) === i);
+        "/login",
+        "https://abms-lkw9.onrender.com/login",
+        "https://abms-lkw9.onrender.com/api/login"
+      ];
       let response: Response | null = null;
       let data: any = {};
 

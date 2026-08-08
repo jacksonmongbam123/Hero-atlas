@@ -9,9 +9,103 @@ import {
   AlertCircle,
   CalendarDays
 } from "lucide-react";
-import { fetchWithFallback, getStoredToken } from "../utils/apiUrl";
 
 const EMPTY_ARRAY: any[] = [];
+
+// Fallback fetch helper prioritizing remote API endpoints (e.g., https://abms-lkw9.onrender.com) then local origin
+const getStoredToken = (): string => {
+  try {
+    return localStorage.getItem("token") || localStorage.getItem("authToken") || localStorage.getItem("userToken") || "";
+  } catch {
+    return "";
+  }
+};
+
+async function fetchWithFallback(path: string, options?: RequestInit): Promise<any> {
+  const candidates = [
+    "",
+    typeof window !== "undefined" ? window.location.origin : "",
+    "https://abms-lkw9.onrender.com",
+    "https://abms-lkw9.onrender.com/api"
+  ];
+
+  const rawToken = (options?.headers as any)?.Authorization || (options?.headers as any)?.authorization || getStoredToken();
+  const authHeader = rawToken ? (rawToken.startsWith("Bearer ") ? rawToken : `Bearer ${rawToken}`) : "";
+
+  const combinedRecords: any[] = [];
+  let successObject: any = null;
+
+  for (const baseUrl of candidates) {
+    try {
+      const cleanPath = path.startsWith("/") ? path : `/${path}`;
+      let url = "";
+      if (baseUrl) {
+        if (baseUrl.endsWith("/api") && cleanPath.startsWith("/api/")) {
+          url = `${baseUrl.slice(0, -4)}${cleanPath}`;
+        } else {
+          url = `${baseUrl}${cleanPath}`;
+        }
+      } else {
+        url = cleanPath.startsWith("/api/") ? cleanPath : `/api${cleanPath}`;
+      }
+
+      const mergedHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        ...(options?.headers as any)
+      };
+      if (authHeader && !mergedHeaders["Authorization"] && !mergedHeaders["authorization"]) {
+        mergedHeaders["Authorization"] = authHeader;
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+
+      const response = await fetch(url, {
+        cache: "no-store",
+        signal: controller.signal,
+        ...options,
+        headers: mergedHeaders
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const contentType = response.headers.get("content-type") || "";
+        const text = await response.text();
+        if (text && !contentType.includes("html") && !text.trim().startsWith("<!") && !text.trim().startsWith("<html")) {
+          try {
+            const parsed = JSON.parse(text);
+            if (Array.isArray(parsed)) {
+              if (parsed.length > 0) {
+                combinedRecords.push(...parsed);
+                break;
+              }
+            } else if (parsed && typeof parsed === "object") {
+              const list = parsed.records || parsed.data || parsed.attendance || parsed.results || parsed.logs;
+              if (Array.isArray(list) && list.length > 0) {
+                combinedRecords.push(...list);
+                break;
+              } else if (!successObject) {
+                successObject = parsed;
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch (err) {
+      // continue to next candidate
+    }
+  }
+
+  if (combinedRecords.length > 0) {
+    return combinedRecords;
+  }
+  if (successObject) {
+    return successObject;
+  }
+  return [];
+}
 
 export function StudentAttendanceCalendar({
   user,
