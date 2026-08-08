@@ -807,8 +807,8 @@ function UnusedStudentAttendanceCalendar({
                     <ChevronDown className="w-3.5 h-3.5 transition-transform group-open:rotate-180" />
                   </summary>
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-96 overflow-y-auto pr-1">
-                    {dailyRoster.students.map((st) => (
-                      <div key={st.id} className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
+                    {dailyRoster.students.map((st, idx) => (
+                      <div key={`daily-st-${st.id || idx}-${idx}`} className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
                         <div className="truncate pr-2">
                           <span className="font-bold text-slate-200 block truncate">{st.name}</span>
                           <span className="text-[9px] text-slate-500 font-mono block">Roll: {st.rollNo}</span>
@@ -1226,8 +1226,8 @@ function DailyAttendanceInspector({
               <ChevronDown className="w-3.5 h-3.5 transition-transform group-open:rotate-180" />
             </summary>
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-80 overflow-y-auto pr-1">
-              {inspectorRoster.students.map((st) => (
-                <div key={st.id} className="bg-slate-900/80 border border-slate-800/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
+              {inspectorRoster.students.map((st, idx) => (
+                <div key={`insp-st-${st.id || idx}-${idx}`} className="bg-slate-900/80 border border-slate-800/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
                   <div className="truncate pr-2">
                     <span className="font-bold text-slate-200 block truncate">{st.name}</span>
                     <span className="text-[9px] text-slate-500 font-mono block">Roll: {st.rollNo}</span>
@@ -4158,7 +4158,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
                         return (
                           <div
-                            key={notif._id || notif.id || idx}
+                            key={`notif-${notif._id || notif.id || 'item'}-${idx}`}
                             className="bg-slate-900/40 hover:bg-slate-900/80 border border-slate-900 rounded-2xl p-4 transition-colors space-y-2 text-left"
                           >
                             <div className="flex items-center justify-between gap-2 border-b border-slate-900/50 pb-1.5">
@@ -4237,8 +4237,8 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
               <p className="text-xs text-slate-400 py-2">No student profiles mapped to this parent account.</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                {parentChildren.map((child: any) => {
-                  const childKey = child._id || child.id || child.studentID || child.student_id || child.reg_no;
+                {parentChildren.map((child: any, idx: number) => {
+                  const childKey = child._id || child.id || child.studentID || child.student_id || child.reg_no || idx;
                   const isSelected =
                     String(child._id) === String(selectedChildId) ||
                     String(child.id) === String(selectedChildId) ||
@@ -4250,7 +4250,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
                   return (
                     <button
-                      key={childKey}
+                      key={`pchild-${childKey}-${idx}`}
                       type="button"
                       onClick={() => setSelectedChildId(childKey)}
                       className={`text-left p-3 rounded-xl border text-xs transition-all flex items-center justify-between gap-3 cursor-pointer ${
@@ -4778,7 +4778,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
                           return (
                             <div
-                              key={leave.id || leave._id || `leave-${idx}`}
+                              key={`leave-${leave.id || leave._id || 'item'}-${idx}`}
                               className="bg-slate-950/50 border border-slate-900/80 hover:border-slate-800 rounded-2xl p-4.5 space-y-3 transition-colors text-left font-sans"
                             >
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-900/40">
@@ -4874,7 +4874,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                         
                         return (
                           <div
-                            key={item.id || idx}
+                            key={`act-${item.id || item._id || 'item'}-${idx}`}
                             className="bg-slate-950/40 border border-slate-900 rounded-3xl p-5 space-y-4 hover:border-slate-800 transition-all relative text-left shadow-lg shadow-slate-950/20 hover:shadow-slate-950/40"
                           >
                             <div className="flex items-center justify-between border-b border-slate-900/60 pb-3">
@@ -5209,7 +5209,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
                           return (
                             <div
-                              key={item._id || item.id || idx}
+                              key={`mark-${item._id || item.id || 'm'}-${idx}`}
                               className="bg-slate-950/40 border border-slate-900 rounded-3xl p-5 space-y-4 hover:border-slate-800 transition-all relative shadow-lg shadow-slate-950/20"
                             >
                               <div className="flex items-center justify-between border-b border-slate-900/60 pb-3">
@@ -5360,7 +5360,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
                           return (
                             <div
-                              key={item._id || item.id || idx}
+                              key={`fee-${item._id || item.id || 'f'}-${idx}`}
                               className="bg-slate-950/40 border border-slate-900 rounded-3xl p-5 space-y-4 hover:border-slate-800 transition-all relative shadow-lg shadow-slate-950/20"
                             >
                               <div className="flex items-center justify-between border-b border-slate-900/60 pb-3">
@@ -5740,14 +5740,14 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                         );
                       }
 
-                      return filtered.map((student) => {
+                      return filtered.map((student, idx) => {
                         const initials = student.name
                           .split(" ")
                           .map(n => n[0])
                           .join("");
                         
                         return (
-                          <div key={student.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div key={`attst-${student.id || student._id || 'st'}-${idx}`} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             {/* Student Name and Metadata */}
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-xs font-bold text-slate-300 font-mono">
@@ -5841,8 +5841,8 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                   </div>
 
                   <div className="space-y-3">
-                    {attendanceLogs.map((log) => (
-                      <div key={log.id} className="bg-slate-950/60 border border-slate-900/60 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    {attendanceLogs.map((log, idx) => (
+                      <div key={`attlog-${log.id || log._id || 'log'}-${idx}`} className="bg-slate-950/60 border border-slate-900/60 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                         <div className="flex items-center gap-3">
                           <div className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
                             <Calendar className="w-4 h-4" />
@@ -6799,14 +6799,14 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                       >
                         <option value="">-- Choose Classroom Section --</option>
                         {teacherClasses.length > 0 ? (
-                          teacherClasses.map((c: any) => (
-                            <option key={c.id} value={c.id}>
+                          teacherClasses.map((c: any, idx: number) => (
+                            <option key={`tc-${c.id || c._id || 'cls'}-${idx}`} value={c.id}>
                               {c.name || resolveClassNameWithSection(c.id)}
                             </option>
                           ))
                         ) : (
-                          organizationClasses.map((c: any) => (
-                            <option key={c._id} value={c._id}>
+                          organizationClasses.map((c: any, idx: number) => (
+                            <option key={`oc-${c._id || c.id || 'cls'}-${idx}`} value={c._id}>
                               {resolveClassNameWithSection(c)}
                             </option>
                           ))
@@ -6870,8 +6870,8 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                         className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer font-medium"
                       >
                         <option value="">-- Choose Organization Subject --</option>
-                        {filteredOrgSubjects.map((s: any) => (
-                          <option key={s._id || s.subject} value={s._id || s.subject}>
+                        {filteredOrgSubjects.map((s: any, idx: number) => (
+                          <option key={`sub-${s._id || s.subject || 's'}-${idx}`} value={s._id || s.subject}>
                             {s.subject || s.subject_name || s.name || resolveSubjectName(s._id)}
                           </option>
                         ))}
@@ -7009,12 +7009,12 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {homeworkList.map((hw) => {
+                    {homeworkList.map((hw, idx) => {
                       const hwId = hw._id || hw.id;
                       const subjectName = resolveSubjectName(hw.subject_id) || hw.subject_id || "General Subject";
                       return (
                         <div 
-                          key={hwId}
+                          key={`hw-${hwId || 'hw'}-${idx}`}
                           className="bg-slate-950/40 border border-slate-900/80 rounded-2xl p-5 space-y-4 relative overflow-hidden flex flex-col justify-between hover:border-slate-800 transition-colors"
                         >
                           <div className="space-y-2">
@@ -7380,8 +7380,8 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                         <Users className="w-3.5 h-3.5" /> Enrolled Children ({parentChildren.length})
                       </h4>
                       <div className="space-y-2">
-                        {parentChildren.map((child: any) => {
-                          const childKey = child._id || child.id || child.studentID || child.student_id || child.reg_no;
+                        {parentChildren.map((child: any, idx: number) => {
+                          const childKey = child._id || child.id || child.studentID || child.student_id || child.reg_no || idx;
                           const isSelected =
                             String(child._id) === String(selectedChildId) ||
                             String(child.id) === String(selectedChildId) ||
@@ -7390,7 +7390,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                             String(child.student_id) === String(selectedChildId);
                           return (
                             <div
-                              key={childKey}
+                              key={`bchild-${childKey}-${idx}`}
                               onClick={() => setSelectedChildId(childKey)}
                               className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-center justify-between ${
                                 isSelected ? "bg-amber-500/15 border-amber-500/40 text-amber-300 font-bold shadow-sm" : "bg-slate-950/60 border-slate-900 text-slate-300 hover:border-slate-800"
