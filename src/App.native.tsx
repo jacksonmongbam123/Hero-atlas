@@ -12,6 +12,7 @@ export default function App() {
   
   const canGoBackRef = useRef(false);
   const nativeCanGoBackRef = useRef(false);
+  const lastBackPressTimeRef = useRef<number>(0);
   const webViewRef = useRef<WebView>(null);
 
   const handleReload = () => {
@@ -27,6 +28,38 @@ export default function App() {
         const canBack = Boolean(data.canGoBack);
         setCanGoBack(canBack);
         canGoBackRef.current = canBack;
+      } else if (data && data.type === "EXIT_APP") {
+        const now = Date.now();
+        if (now - lastBackPressTimeRef.current < 2000) {
+          BackHandler.exitApp();
+        } else {
+          lastBackPressTimeRef.current = now;
+          if (webViewRef.current) {
+            webViewRef.current.injectJavaScript(`
+              if (!document.getElementById('android-exit-toast')) {
+                var t = document.createElement('div');
+                t.id = 'android-exit-toast';
+                t.innerText = 'Press back again to exit';
+                t.style.position = 'fixed';
+                t.style.bottom = '80px';
+                t.style.left = '50%';
+                t.style.transform = 'translateX(-50%)';
+                t.style.backgroundColor = 'rgba(15,23,42,0.92)';
+                t.style.color = '#ffffff';
+                t.style.padding = '8px 16px';
+                t.style.borderRadius = '20px';
+                t.style.fontSize = '12px';
+                t.style.fontWeight = 'bold';
+                t.style.zIndex = '999999';
+                t.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+                t.style.pointerEvents = 'none';
+                document.body.appendChild(t);
+                setTimeout(function(){ if(t && t.parentNode) t.parentNode.removeChild(t); }, 2000);
+              }
+              true;
+            `);
+          }
+        }
       }
     } catch (e) {
       // ignore
@@ -35,9 +68,19 @@ export default function App() {
 
   useEffect(() => {
     const onBackPress = () => {
-      const shouldGoBack = canGoBackRef.current || nativeCanGoBackRef.current;
-      if (shouldGoBack && webViewRef.current) {
-        webViewRef.current.injectJavaScript("window.history.back(); true;");
+      if (webViewRef.current) {
+        webViewRef.current.injectJavaScript(`
+          if (typeof window.handleAndroidBack === "function") {
+            window.handleAndroidBack();
+          } else if (window.history.length > 1) {
+            window.history.back();
+          } else {
+            if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === "function") {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: "EXIT_APP" }));
+            }
+          }
+          true;
+        `);
         return true;
       }
       return false;

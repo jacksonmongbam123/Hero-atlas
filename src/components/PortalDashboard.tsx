@@ -2305,6 +2305,61 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
     }
   };
 
+  // Expose global hardware back handler for Android Native WebView
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    (window as any).handleAndroidBack = () => {
+      if (selectedFeeReceipt) {
+        closeFeeReceiptModal();
+        return true;
+      }
+      if (isAttendanceSaved) {
+        setIsAttendanceSaved(false);
+        setAttendanceSuccessSummary(null);
+        return true;
+      }
+      if (isNotificationsOpen) {
+        closeNotifications();
+        return true;
+      }
+      if (isProfileOpen) {
+        closeProfileDrawer();
+        return true;
+      }
+      if (activeTab !== "home" || homeTabSubSection !== "menu") {
+        if (window.history.length > 1 && window.history.state && !window.history.state.isRoot) {
+          window.history.back();
+        } else {
+          changeTab("home", "menu");
+        }
+        return true;
+      }
+
+      if ((window as any).ReactNativeWebView && typeof (window as any).ReactNativeWebView.postMessage === "function") {
+        try {
+          (window as any).ReactNativeWebView.postMessage(JSON.stringify({ type: "EXIT_APP" }));
+        } catch (e) {}
+      }
+      return false;
+    };
+
+    return () => {
+      delete (window as any).handleAndroidBack;
+    };
+  }, [
+    selectedFeeReceipt,
+    isAttendanceSaved,
+    isNotificationsOpen,
+    isProfileOpen,
+    activeTab,
+    homeTabSubSection,
+    closeFeeReceiptModal,
+    closeNotifications,
+    closeProfileDrawer,
+    changeTab
+  ]);
+
   // Fetch classes & logs for the teacher-organization from the real MongoDB backend
   React.useEffect(() => {
     if (!user) return;
