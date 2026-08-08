@@ -44,90 +44,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { StudentAttendanceCalendar } from "./StudentAttendanceCalendar";
-
-const getStoredToken = (): string => {
-  try {
-    return localStorage.getItem("token") || localStorage.getItem("authToken") || localStorage.getItem("userToken") || "";
-  } catch {
-    return "";
-  }
-};
-
-const fetchWithFallback = async (path: string, options?: RequestInit): Promise<any> => {
-  const candidates = [
-    "",
-    typeof window !== "undefined" ? window.location.origin : "",
-    "https://abms-lkw9.onrender.com",
-    "https://abms-lkw9.onrender.com/api"
-  ];
-
-  const rawToken = (options?.headers as any)?.Authorization || (options?.headers as any)?.authorization || getStoredToken();
-  const authHeader = rawToken ? (rawToken.startsWith("Bearer ") ? rawToken : `Bearer ${rawToken}`) : "";
-
-  const combinedRecords: any[] = [];
-  let successObject: any = null;
-
-  for (const baseUrl of candidates) {
-    try {
-      const cleanPath = path.startsWith("/") ? path : `/${path}`;
-      let url = "";
-      if (baseUrl) {
-        if (baseUrl.endsWith("/api") && cleanPath.startsWith("/api/")) {
-          url = `${baseUrl.slice(0, -4)}${cleanPath}`;
-        } else {
-          url = `${baseUrl}${cleanPath}`;
-        }
-      } else {
-        url = cleanPath.startsWith("/api/") ? cleanPath : `/api${cleanPath}`;
-      }
-
-      const mergedHeaders: Record<string, string> = {
-        "Content-Type": "application/json",
-        ...(options?.headers as any)
-      };
-      if (authHeader && !mergedHeaders["Authorization"] && !mergedHeaders["authorization"]) {
-        mergedHeaders["Authorization"] = authHeader;
-      }
-
-      const response = await fetch(url, {
-        ...options,
-        headers: mergedHeaders
-      });
-
-      if (response.ok) {
-        const contentType = response.headers.get("content-type") || "";
-        const text = await response.text();
-        if (text && !contentType.includes("html") && !text.trim().startsWith("<!") && !text.trim().startsWith("<html")) {
-          try {
-            const parsed = JSON.parse(text);
-            if (Array.isArray(parsed)) {
-              if (parsed.length > 0) {
-                combinedRecords.push(...parsed);
-              }
-            } else if (parsed && typeof parsed === "object") {
-              const list = parsed.records || parsed.data || parsed.attendance || parsed.results || parsed.logs;
-              if (Array.isArray(list) && list.length > 0) {
-                combinedRecords.push(...list);
-              } else if (!successObject) {
-                successObject = parsed;
-              }
-            }
-          } catch {}
-        }
-      }
-    } catch (err) {
-      // continue to next candidate
-    }
-  }
-
-  if (combinedRecords.length > 0) {
-    return combinedRecords;
-  }
-  if (successObject) {
-    return successObject;
-  }
-  return [];
-};
+import { fetchWithFallback, getStoredToken, getApiUrl } from "../utils/apiUrl";
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -226,7 +143,7 @@ function UnusedStudentAttendanceCalendar({
       const targetClass = classFilterId !== "all" ? classFilterId : (user?.class_id || (teacherClasses[0]?.id) || (organizationClasses[0]?._id) || "");
       
       try {
-        const res = await fetch("/api/attendance/students", {
+        const res = await fetch(getApiUrl("/api/attendance/students"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ class_id: targetClass, organization_id: orgId })
@@ -278,7 +195,7 @@ function UnusedStudentAttendanceCalendar({
             } else {
               // 2. Direct local backend lookup
               try {
-                const localRes = await fetch("/api/class/attendance/lookup", {
+                const localRes = await fetch(getApiUrl("/api/class/attendance/lookup"), {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ studentID: sId, date: dateStr })
@@ -2532,7 +2449,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
     // Load logs from local DB
     const token = user.token || "";
-    fetch(`/api/attendance/logs?teacherId=${encodeURIComponent(teacherId)}&organizationId=${encodeURIComponent(organizationId)}`)
+    fetch(getApiUrl(`/api/attendance/logs?teacherId=${encodeURIComponent(teacherId)}&organizationId=${encodeURIComponent(organizationId)}`))
       .then(res => res.json())
       .then(logs => {
         if (Array.isArray(logs)) {
@@ -2940,7 +2857,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       let data: any[] = [];
       // Try local server first
       try {
-        const localRes = await fetch(`/api/homework/getList?class_id=${encodeURIComponent(classId)}`, {
+        const localRes = await fetch(getApiUrl(`/api/homework/getList?class_id=${encodeURIComponent(classId)}`), {
           method: "GET",
           headers: {
             "Authorization": `Bearer ${user?.token || ""}`,
@@ -3012,8 +2929,8 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       const reqBody = JSON.stringify({ id: homeworkId, schema_id: homeworkId });
 
       await Promise.allSettled([
-        fetch("/api/homework/delete", { method: "POST", headers: reqHeaders, body: reqBody }),
-        fetch("/homework/delete", { method: "POST", headers: reqHeaders, body: reqBody }),
+        fetch(getApiUrl("/api/homework/delete"), { method: "POST", headers: reqHeaders, body: reqBody }),
+        fetch(getApiUrl("/homework/delete"), { method: "POST", headers: reqHeaders, body: reqBody }),
         fetchWithFallback("/homework/delete", { method: "POST", headers: reqHeaders, body: reqBody })
       ]);
 
@@ -3108,7 +3025,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
         uploadSuccess = true;
       } catch (remoteErr) {
         console.warn("Remote candidate upload failed, attempting local backend endpoint:", remoteErr);
-        const localRes = await fetch("/api/homework/upload", {
+        const localRes = await fetch(getApiUrl("/api/homework/upload"), {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${user.token || ""}`,
@@ -3143,7 +3060,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
   const downloadHomework = async (homeworkId: string, filename: string) => {
     try {
       const candidates = [
-        `https://abms-lkw9.onrender.com/homework/download`,
+        getApiUrl(`/api/homework/download?schema_id=${encodeURIComponent(homeworkId)}&id=${encodeURIComponent(homeworkId)}`),
         `/api/homework/download?schema_id=${encodeURIComponent(homeworkId)}&id=${encodeURIComponent(homeworkId)}`,
         `/homework/download?schema_id=${encodeURIComponent(homeworkId)}&id=${encodeURIComponent(homeworkId)}`
       ];
@@ -3469,7 +3386,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       } catch (err) {
         console.warn("Failed fetching from remote /rel/extraActivityTeacher/retrieve, trying local:", err);
         try {
-          const localRes = await fetch("/api/rel/extraActivityTeacher/retrieve", {
+          const localRes = await fetch(getApiUrl("/api/rel/extraActivityTeacher/retrieve"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ limit: 100 })
@@ -3499,7 +3416,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       } catch (err) {
         console.warn("Failed fetching from remote /m/extraActivity/retrieve, trying local:", err);
         try {
-          const localRes = await fetch("/api/m/extraActivity/retrieve", {
+          const localRes = await fetch(getApiUrl("/api/m/extraActivity/retrieve"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ limit: 100 })
@@ -3567,7 +3484,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       } catch (err) {
         console.warn("Failed fetching from remote /m/organization/retrieve, trying local:", err);
         try {
-          const localRes = await fetch("/api/m/organization/retrieve", {
+          const localRes = await fetch(getApiUrl("/api/m/organization/retrieve"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ limit: 100 })
@@ -3663,7 +3580,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
     // Strategy 1: Local API route
     if (primaryStudentId) {
       try {
-        const res = await fetch(`/api/student/marks?studentId=${encodeURIComponent(primaryStudentId)}`, {
+        const res = await fetch(getApiUrl(`/api/student/marks?studentId=${encodeURIComponent(primaryStudentId)}`), {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -3777,7 +3694,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
     // Strategy 1: Local API route
     if (primaryStudentId) {
       try {
-        const res = await fetch(`/api/student/fees?studentId=${encodeURIComponent(primaryStudentId)}`, {
+        const res = await fetch(getApiUrl(`/api/student/fees?studentId=${encodeURIComponent(primaryStudentId)}`), {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -3897,7 +3814,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       } catch (err) {
         console.warn("Failed fetching from remote /notification/retrieve, trying local fallback:", err);
         try {
-          const localRes = await fetch("/api/notification/retrieve", {
+          const localRes = await fetch(getApiUrl("/api/notification/retrieve"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ limit: 50, organization_id: organizationId })
@@ -4029,7 +3946,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
     try {
       // 1. Try posting to save attendance API
       try {
-        await fetch("/api/attendance/save", {
+        await fetch(getApiUrl("/api/attendance/save"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -4093,7 +4010,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       // Refresh logs
       const teacherId = user.reg_no || user.nic || user.phone || user.id || user.username || "T101";
       const organizationId = user.organization_id || user.school_id || user.branch_id || "ATH-ORG-941";
-      fetch(`/api/attendance/logs?teacherId=${encodeURIComponent(teacherId)}&organizationId=${encodeURIComponent(organizationId)}`)
+      fetch(getApiUrl(`/api/attendance/logs?teacherId=${encodeURIComponent(teacherId)}&organizationId=${encodeURIComponent(organizationId)}`))
         .then(res => res.json())
         .then(logs => {
           if (Array.isArray(logs)) {
