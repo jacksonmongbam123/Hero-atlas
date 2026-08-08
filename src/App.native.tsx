@@ -72,8 +72,6 @@ export default function App() {
         webViewRef.current.injectJavaScript(`
           if (typeof window.handleAndroidBack === "function") {
             window.handleAndroidBack();
-          } else if (window.history.length > 1) {
-            window.history.back();
           } else {
             if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === "function") {
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: "EXIT_APP" }));

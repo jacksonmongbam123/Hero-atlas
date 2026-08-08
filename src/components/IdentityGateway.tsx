@@ -26,6 +26,24 @@ export default function IdentityGateway({ theme, onToggleTheme, onSuccess }: Ide
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Expose global hardware back handler for Android Native WebView on login gateway
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    (window as any).handleAndroidBack = () => {
+      if ((window as any).ReactNativeWebView && typeof (window as any).ReactNativeWebView.postMessage === "function") {
+        try {
+          (window as any).ReactNativeWebView.postMessage(JSON.stringify({ type: "EXIT_APP" }));
+        } catch (e) {}
+      }
+      return false;
+    };
+
+    return () => {
+      delete (window as any).handleAndroidBack;
+    };
+  }, []);
+
   const handleRoleChange = (role: "teacher" | "student" | "parent") => {
     setActiveRole(role);
     setErrorMsg(null);
