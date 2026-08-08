@@ -224,6 +224,38 @@ export function StudentAttendanceCalendar({
 
     const fetchTokens = studentTokens;
 
+    // Helper to format any date representation to YYYY-MM-DD
+    const parseToYMD = (val: any): string => {
+      if (!val) return "";
+      if (val instanceof Date) {
+        if (isNaN(val.getTime())) return "";
+        const y = val.getUTCFullYear();
+        const m = String(val.getUTCMonth() + 1).padStart(2, "0");
+        const d = String(val.getUTCDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+      }
+      const s = String(val).trim();
+      if (!s) return "";
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        return s.slice(0, 10);
+      }
+      const dt = new Date(s);
+      if (!isNaN(dt.getTime())) {
+        if (s.includes("GMT") || s.includes("UTC") || s.includes("Z") || s.includes("T")) {
+          const y = dt.getUTCFullYear();
+          const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
+          const d = String(dt.getUTCDate()).padStart(2, "0");
+          return `${y}-${m}-${d}`;
+        } else {
+          const y = dt.getFullYear();
+          const m = String(dt.getMonth() + 1).padStart(2, "0");
+          const d = String(dt.getDate()).padStart(2, "0");
+          return `${y}-${m}-${d}`;
+        }
+      }
+      return "";
+    };
+
     // Helper to apply status to date
     const applyRecord = (rec: any) => {
       if (!rec) return;
@@ -240,13 +272,7 @@ export function StudentAttendanceCalendar({
       // Accept records if matchesToken or if record returned from student-specific month endpoint.
       if (matchesToken || true) {
         const rawDate = rec.date || rec.attendanceDate || rec.attendance_date;
-        let dateStr = "";
-        if (rawDate instanceof Date) {
-          dateStr = rawDate.toISOString().split("T")[0];
-        } else {
-          const s = String(rawDate || "").trim();
-          dateStr = s.includes("T") ? s.split("T")[0] : s.slice(0, 10);
-        }
+        const dateStr = parseToYMD(rawDate);
 
         if (dateStr && dateStr.length >= 10) {
           const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
