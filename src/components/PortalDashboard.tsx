@@ -2265,6 +2265,34 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
     };
   }, [isAttendanceSaved]);
 
+  // Notify Native Android WebView container of back-stack state for hardware back button
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const isRoot = 
+      activeTab === "home" && 
+      homeTabSubSection === "menu" && 
+      !isProfileOpen && 
+      !isNotificationsOpen && 
+      !selectedFeeReceipt && 
+      !isAttendanceSaved;
+
+    const canGoBack = !isRoot;
+
+    if ((window as any).ReactNativeWebView && typeof (window as any).ReactNativeWebView.postMessage === "function") {
+      try {
+        (window as any).ReactNativeWebView.postMessage(JSON.stringify({
+          type: "NAV_STATE",
+          canGoBack,
+          activeTab,
+          homeTabSubSection
+        }));
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [activeTab, homeTabSubSection, isProfileOpen, isNotificationsOpen, selectedFeeReceipt, isAttendanceSaved]);
+
   const closeAttendanceSuccessModal = () => {
     setIsAttendanceSaved(false);
     setAttendanceSuccessSummary(null);

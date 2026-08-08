@@ -9,6 +9,9 @@ export default function App() {
   const [error, setError] = useState(false);
   const [key, setKey] = useState(0);
   const [canGoBack, setCanGoBack] = useState(false);
+  
+  const canGoBackRef = useRef(false);
+  const nativeCanGoBackRef = useRef(false);
   const webViewRef = useRef<WebView>(null);
 
   const handleReload = () => {
@@ -17,10 +20,24 @@ export default function App() {
     setKey((prev) => prev + 1);
   };
 
+  const handleMessage = (event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data && data.type === "NAV_STATE") {
+        const canBack = Boolean(data.canGoBack);
+        setCanGoBack(canBack);
+        canGoBackRef.current = canBack;
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     const onBackPress = () => {
-      if (canGoBack && webViewRef.current) {
-        webViewRef.current.goBack();
+      const shouldGoBack = canGoBackRef.current || nativeCanGoBackRef.current;
+      if (shouldGoBack && webViewRef.current) {
+        webViewRef.current.injectJavaScript("window.history.back(); true;");
         return true;
       }
       return false;
@@ -28,7 +45,7 @@ export default function App() {
 
     const backHandler = BackHandler.addEventListener("hardwareBackPress", onBackPress);
     return () => backHandler.remove();
-  }, [canGoBack]);
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -44,8 +61,13 @@ export default function App() {
           startInLoadingState={true}
           allowsInlineMediaPlayback={true}
           mixedContentMode="always"
+          onMessage={handleMessage}
           onNavigationStateChange={(navState) => {
-            setCanGoBack(navState.canGoBack);
+            nativeCanGoBackRef.current = navState.canGoBack;
+            if (navState.canGoBack) {
+              setCanGoBack(true);
+              canGoBackRef.current = true;
+            }
           }}
           onLoadStart={() => setLoading(true)}
           onLoadEnd={() => setLoading(false)}
