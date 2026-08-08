@@ -630,37 +630,66 @@ async function saveRemoteAttendance(token: string, classId: string, date: string
       const dateStr = String(date).split("T")[0];
       const bsonDate = new Date(`${dateStr}T00:00:00.000Z`);
 
-      const bulkOps = records.map((r: any) => {
-        const studentId = String(r.studentId || r.id || r._id || r.student_id || r.studentID || "").trim();
-        if (!studentId) return null;
+      const bulkOps: any[] = [];
+
+      for (const r of records) {
+        const studentId = String(r.studentId || r.id || r._id || r.student_id || r.studentID || r.reg_no || "").trim();
+        if (!studentId) continue;
         const attended = r.status === "present" || r.status === "late" || r.attended === true || r.attended === "true";
         const status = r.status || (attended ? "present" : "absent");
 
-        return {
-          updateOne: {
+        const tokenRegex = new RegExp(`^${studentId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+        const allIdMatches: any[] = [tokenRegex, studentId];
+        if (mongoose.Types.ObjectId.isValid(studentId)) {
+          allIdMatches.push(new mongoose.Types.ObjectId(studentId));
+        }
+
+        const dateConditions: any[] = [
+          { date: { $regex: `^${dateStr}` } },
+          { attendanceDate: { $regex: `^${dateStr}` } },
+          { date: dateStr },
+          { attendanceDate: dateStr }
+        ];
+        if (!isNaN(bsonDate.getTime())) {
+          dateConditions.push({ date: bsonDate });
+        }
+
+        bulkOps.push({
+          deleteMany: {
             filter: {
-              $or: [
-                { studentID: studentId, date: { $regex: `^${dateStr}` } },
-                { student_id: studentId, date: { $regex: `^${dateStr}` } },
-                { studentID: studentId, date: bsonDate },
-                { student_id: studentId, date: bsonDate }
+              $and: [
+                {
+                  $or: [
+                    { studentID: { $in: allIdMatches } },
+                    { student_id: { $in: allIdMatches } },
+                    { studentId: { $in: allIdMatches } },
+                    { student: { $in: allIdMatches } },
+                    { reg_no: { $in: allIdMatches } }
+                  ]
+                },
+                { $or: dateConditions }
               ]
-            },
-            update: {
-              $set: {
-                studentID: studentId,
-                student_id: studentId,
-                date: bsonDate,
-                attendanceDate: dateStr,
-                attended,
-                status,
-                updatedAt: new Date()
-              }
-            },
-            upsert: true
+            }
           }
-        };
-      }).filter(Boolean);
+        });
+
+        bulkOps.push({
+          insertOne: {
+            document: {
+              studentID: studentId,
+              student_id: studentId,
+              studentId: studentId,
+              class_id: classId || "",
+              date: bsonDate,
+              attendanceDate: dateStr,
+              attended,
+              status,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            }
+          }
+        });
+      }
 
       if (bulkOps.length > 0) {
         await db.collection("attendances").bulkWrite(bulkOps as any);
@@ -1410,45 +1439,64 @@ async function startServer() {
     try {
       const mongo = await getMongoDb();
       if (mongo && records && Array.isArray(records)) {
-        const bulkOps = records.map((r: any) => {
-          const sId = String(r.studentId || r.id || r._id || r.student_id || r.studentID || "");
-          const attended = r.status === "present" || r.status === "late" || r.attended === true;
-          const bsonDate = new Date(`${date}T00:00:00.000Z`);
+        const bulkOps: any[] = [];
+        const dateStr = String(date).split("T")[0];
+        const bsonDate = new Date(`${dateStr}T00:00:00.000Z`);
 
-          const tokens = Array.from(new Set([sId].filter(Boolean)));
+        for (const r of records) {
+          const sId = String(r.studentId || r.id || r._id || r.student_id || r.studentID || r.reg_no || "").trim();
+          if (!sId) continue;
+          const attended = r.status === "present" || r.status === "late" || r.attended === true || r.attended === "true";
+          const status = r.status || (attended ? "present" : "absent");
+
+          const expandedTokensSet = await expandStudentTokens(mongo, [sId]);
+          const tokens = Array.from(expandedTokensSet);
+          if (sId && !tokens.includes(sId.toLowerCase())) {
+            tokens.push(sId.toLowerCase());
+          }
           const tokenRegexes = tokens.map(t => new RegExp(`^${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
           const tokenObjIds = tokens.filter(t => mongoose.Types.ObjectId.isValid(t)).map(t => new mongoose.Types.ObjectId(t));
           const allIdMatches = [...tokenRegexes, ...tokenObjIds];
+          const dateConditions = buildDateFilterConditions([dateStr]);
 
-          return {
-            updateMany: {
+          bulkOps.push({
+            deleteMany: {
               filter: {
-                $or: [
-                  { studentID: { $in: allIdMatches }, date: { $regex: `^${date}` } },
-                  { student_id: { $in: allIdMatches }, date: { $regex: `^${date}` } },
-                  { studentID: { $in: allIdMatches }, date: bsonDate },
-                  { student_id: { $in: allIdMatches }, date: bsonDate },
-                  { studentID: { $in: allIdMatches }, attendanceDate: date },
-                  { student_id: { $in: allIdMatches }, attendanceDate: date }
+                $and: [
+                  {
+                    $or: [
+                      { studentID: { $in: allIdMatches } },
+                      { student_id: { $in: allIdMatches } },
+                      { studentId: { $in: allIdMatches } },
+                      { student: { $in: allIdMatches } },
+                      { reg_no: { $in: allIdMatches } }
+                    ]
+                  },
+                  { $or: dateConditions }
                 ]
-              },
-              update: {
-                $set: {
-                  studentID: sId,
-                  student_id: sId,
-                  class_id: classId,
-                  className,
-                  date: bsonDate,
-                  attendanceDate: date,
-                  attended,
-                  status: r.status || (attended ? "present" : "absent"),
-                  updatedAt: new Date()
-                }
-              },
-              upsert: true
+              }
             }
-          };
-        });
+          });
+
+          bulkOps.push({
+            insertOne: {
+              document: {
+                studentID: sId,
+                student_id: sId,
+                studentId: sId,
+                class_id: classId || "",
+                className: className || "",
+                date: bsonDate,
+                attendanceDate: dateStr,
+                attended,
+                status,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              }
+            }
+          });
+        }
+
         if (bulkOps.length > 0) {
           await mongo.collection("attendances").bulkWrite(bulkOps as any);
         }
@@ -1541,11 +1589,12 @@ async function startServer() {
     try {
       const mongo = await getMongoDb();
       if (mongo && processed.length > 0) {
-        const bulkOps = await Promise.all(processed.map(async rec => {
+        const bulkOps: any[] = [];
+        for (const rec of processed) {
           const sId = rec.studentID;
           const dateStr = rec.date;
           const bsonDate = new Date(`${dateStr}T00:00:00.000Z`);
-          
+
           const expandedTokensSet = await expandStudentTokens(mongo, [sId]);
           const tokens = Array.from(expandedTokensSet);
           if (sId && !tokens.includes(sId.toLowerCase())) {
@@ -1554,36 +1603,47 @@ async function startServer() {
           const tokenRegexes = tokens.map(t => new RegExp(`^${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
           const tokenObjIds = tokens.filter(t => mongoose.Types.ObjectId.isValid(t)).map(t => new mongoose.Types.ObjectId(t));
           const allIdMatches = [...tokenRegexes, ...tokenObjIds];
+          const dateConditions = buildDateFilterConditions([dateStr]);
 
-          return {
-            updateMany: {
+          bulkOps.push({
+            deleteMany: {
               filter: {
-                $or: [
-                  { studentID: { $in: allIdMatches }, date: { $regex: `^${dateStr}` } },
-                  { student_id: { $in: allIdMatches }, date: { $regex: `^${dateStr}` } },
-                  { studentId: { $in: allIdMatches }, date: { $regex: `^${dateStr}` } },
-                  { studentID: { $in: allIdMatches }, date: bsonDate },
-                  { student_id: { $in: allIdMatches }, date: bsonDate },
-                  { studentID: { $in: allIdMatches }, attendanceDate: dateStr },
-                  { student_id: { $in: allIdMatches }, attendanceDate: dateStr }
+                $and: [
+                  {
+                    $or: [
+                      { studentID: { $in: allIdMatches } },
+                      { student_id: { $in: allIdMatches } },
+                      { studentId: { $in: allIdMatches } },
+                      { student: { $in: allIdMatches } },
+                      { reg_no: { $in: allIdMatches } }
+                    ]
+                  },
+                  { $or: dateConditions }
                 ]
-              },
-              update: {
-                $set: {
-                  studentID: sId,
-                  student_id: sId,
-                  date: bsonDate,
-                  attendanceDate: dateStr,
-                  attended: rec.attended,
-                  status: rec.status,
-                  updatedAt: new Date()
-                }
-              },
-              upsert: true
+              }
             }
-          };
-        }));
-        await mongo.collection("attendances").bulkWrite(bulkOps as any);
+          });
+
+          bulkOps.push({
+            insertOne: {
+              document: {
+                studentID: sId,
+                student_id: sId,
+                studentId: sId,
+                date: bsonDate,
+                attendanceDate: dateStr,
+                attended: rec.attended,
+                status: rec.status,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              }
+            }
+          });
+        }
+
+        if (bulkOps.length > 0) {
+          await mongo.collection("attendances").bulkWrite(bulkOps as any);
+        }
       }
     } catch (err) {
       console.warn("[MongoDB addAttendanceHandler] Save error:", err);
@@ -1866,9 +1926,9 @@ async function startServer() {
             attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
             status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
           }));
-        } else {
-          // Fallback query if specific student match yielded 0 records
-          const fallbackFilter = cleanDateFilter ? { $or: buildDateFilterConditions(cleanDateFilter) } : {};
+        } else if (targetIds.length === 0 && cleanDateFilter) {
+          // Fallback query only if no specific student target was requested
+          const fallbackFilter = { $or: buildDateFilterConditions(cleanDateFilter) };
           let fallbackDocs = await mongo.collection("attendances").find(fallbackFilter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
           if (fallbackDocs && fallbackDocs.length > 0) {
             matches = fallbackDocs.map(d => ({
@@ -2007,7 +2067,7 @@ async function startServer() {
         }
 
         let docs = await mongo.collection("attendances").find(filter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
-        if ((!docs || docs.length === 0) && prefixes.length > 0) {
+        if ((!docs || docs.length === 0) && targetIds.length === 0 && prefixes.length > 0) {
           const fallbackFilter = { $or: buildDateFilterConditions(prefixes) };
           docs = await mongo.collection("attendances").find(fallbackFilter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
         }
