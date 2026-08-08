@@ -1943,49 +1943,163 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
   const [organizationError, setOrganizationError] = useState<string | null>(null);
 
   // --- Navigation & Mobile Hardware Back Stack Manager ---
+  const pushNavState = useCallback((
+    newTab: "home" | "attendance" | "schedule" | "timetable" | "homework",
+    newSubSection?: "menu" | "leave" | "activities" | "attendance" | "institute" | "marks" | "fees",
+    newProfileOpen?: boolean,
+    newNotificationsOpen?: boolean,
+    newFeeReceipt?: any | null
+  ) => {
+    if (typeof window === "undefined") return;
+
+    const cur = window.history.state || {};
+    const targetTab = newTab;
+    const targetSub = newSubSection !== undefined ? newSubSection : (newTab === "home" ? homeTabSubSection : "menu");
+    const targetProf = newProfileOpen !== undefined ? newProfileOpen : false;
+    const targetNotif = newNotificationsOpen !== undefined ? newNotificationsOpen : false;
+    const targetReceipt = newFeeReceipt !== undefined ? newFeeReceipt : null;
+
+    if (
+      cur.activeTab === targetTab &&
+      cur.homeTabSubSection === targetSub &&
+      Boolean(cur.isProfileOpen) === targetProf &&
+      Boolean(cur.isNotificationsOpen) === targetNotif &&
+      JSON.stringify(cur.selectedFeeReceipt) === JSON.stringify(targetReceipt)
+    ) {
+      return;
+    }
+
+    const nextState = {
+      activeTab: targetTab,
+      homeTabSubSection: targetSub,
+      isProfileOpen: targetProf,
+      isNotificationsOpen: targetNotif,
+      selectedFeeReceipt: targetReceipt,
+      timestamp: Date.now()
+    };
+
+    try {
+      window.history.pushState(nextState, "");
+    } catch (e) {
+      // ignore
+    }
+
+    setActiveTab(targetTab);
+    setHomeTabSubSection(targetSub);
+    setIsProfileOpen(targetProf);
+    setIsNotificationsOpen(targetNotif);
+    setSelectedFeeReceipt(targetReceipt);
+  }, [homeTabSubSection]);
+
   const changeTab = useCallback((
     tab: "home" | "attendance" | "schedule" | "timetable" | "homework",
     subSection: "menu" | "leave" | "activities" | "attendance" | "institute" | "marks" | "fees" = "menu"
   ) => {
-    setActiveTab(tab);
-    setHomeTabSubSection(subSection);
-    setIsProfileOpen(false);
-    setIsNotificationsOpen(false);
-    setSelectedFeeReceipt(null);
-  }, []);
+    pushNavState(tab, subSection, false, false, null);
+  }, [pushNavState]);
 
   const changeHomeSubSection = useCallback((
     subSection: "menu" | "leave" | "activities" | "attendance" | "institute" | "marks" | "fees"
   ) => {
-    setActiveTab("home");
-    setHomeTabSubSection(subSection);
-    setIsProfileOpen(false);
-    setIsNotificationsOpen(false);
-    setSelectedFeeReceipt(null);
-  }, []);
+    pushNavState("home", subSection, false, false, null);
+  }, [pushNavState]);
 
   const openProfileDrawer = useCallback(() => {
-    setIsProfileOpen(true);
-  }, []);
+    pushNavState(activeTab, homeTabSubSection, true, false, selectedFeeReceipt);
+  }, [activeTab, homeTabSubSection, selectedFeeReceipt, pushNavState]);
 
   const closeProfileDrawer = useCallback(() => {
+    const cur = window.history.state;
+    if (cur && cur.isProfileOpen) {
+      try {
+        window.history.back();
+        return;
+      } catch (e) {}
+    }
     setIsProfileOpen(false);
   }, []);
 
   const toggleNotifications = useCallback(() => {
-    setIsNotificationsOpen(prev => !prev);
-  }, []);
+    if (isNotificationsOpen) {
+      const cur = window.history.state;
+      if (cur && cur.isNotificationsOpen) {
+        try {
+          window.history.back();
+          return;
+        } catch (e) {}
+      }
+      setIsNotificationsOpen(false);
+    } else {
+      pushNavState(activeTab, homeTabSubSection, false, true, selectedFeeReceipt);
+    }
+  }, [isNotificationsOpen, activeTab, homeTabSubSection, selectedFeeReceipt, pushNavState]);
 
   const closeNotifications = useCallback(() => {
+    const cur = window.history.state;
+    if (cur && cur.isNotificationsOpen) {
+      try {
+        window.history.back();
+        return;
+      } catch (e) {}
+    }
     setIsNotificationsOpen(false);
   }, []);
 
   const openFeeReceiptModal = useCallback((receipt: any) => {
-    setSelectedFeeReceipt(receipt);
-  }, []);
+    pushNavState(activeTab, homeTabSubSection, isProfileOpen, isNotificationsOpen, receipt);
+  }, [activeTab, homeTabSubSection, isProfileOpen, isNotificationsOpen, pushNavState]);
 
   const closeFeeReceiptModal = useCallback(() => {
+    const cur = window.history.state;
+    if (cur && cur.selectedFeeReceipt) {
+      try {
+        window.history.back();
+        return;
+      } catch (e) {}
+    }
     setSelectedFeeReceipt(null);
+  }, []);
+
+  // Global PopState event listener for mobile back button
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const rootState = {
+      activeTab: "home",
+      homeTabSubSection: "menu",
+      isProfileOpen: false,
+      isNotificationsOpen: false,
+      selectedFeeReceipt: null,
+      timestamp: Date.now()
+    };
+
+    if (!window.history.state || typeof window.history.state.activeTab === "undefined") {
+      try {
+        window.history.replaceState(rootState, "");
+      } catch (e) {}
+    }
+
+    const handlePopState = (e: PopStateEvent) => {
+      const state = e.state;
+      if (state && typeof state.activeTab !== "undefined") {
+        setActiveTab(state.activeTab || "home");
+        setHomeTabSubSection(state.homeTabSubSection || "menu");
+        setIsProfileOpen(Boolean(state.isProfileOpen));
+        setIsNotificationsOpen(Boolean(state.isNotificationsOpen));
+        setSelectedFeeReceipt(state.selectedFeeReceipt || null);
+      } else {
+        setActiveTab("home");
+        setHomeTabSubSection("menu");
+        setIsProfileOpen(false);
+        setIsNotificationsOpen(false);
+        setSelectedFeeReceipt(null);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
   }, []);
   
   // Weekly Timetable Active Filter for mobile responsiveness
@@ -2182,6 +2296,13 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
   const closeAttendanceSuccessModal = () => {
     setIsAttendanceSaved(false);
     setAttendanceSuccessSummary(null);
+    if (window.history.state?.modal === "attendance_success") {
+      try {
+        window.history.back();
+      } catch (e) {
+        // history back fallback ignore
+      }
+    }
   };
 
   // Expose global hardware back handler for Android Native WebView
@@ -2189,38 +2310,31 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
     if (typeof window === "undefined") return;
 
     (window as any).handleAndroidBack = () => {
-      // 1. Close open fee receipt modal
       if (selectedFeeReceipt) {
         closeFeeReceiptModal();
         return true;
       }
-      // 2. Close open attendance success modal
       if (isAttendanceSaved) {
         closeAttendanceSuccessModal();
         return true;
       }
-      // 3. Close open notifications drawer
       if (isNotificationsOpen) {
         closeNotifications();
         return true;
       }
-      // 4. Close open profile drawer
       if (isProfileOpen) {
         closeProfileDrawer();
         return true;
       }
-      // 5. If on non-home tab, return to Home tab
-      if (activeTab !== "home") {
-        changeTab("home", "menu");
-        return true;
-      }
-      // 6. If on non-menu sub-section on Home tab, return to main menu
-      if (homeTabSubSection !== "menu") {
-        changeHomeSubSection("menu");
+      if (activeTab !== "home" || homeTabSubSection !== "menu") {
+        if (window.history.length > 1 && window.history.state && !window.history.state.isRoot) {
+          window.history.back();
+        } else {
+          changeTab("home", "menu");
+        }
         return true;
       }
 
-      // 7. If at root Home menu, signal APK to exit
       if ((window as any).ReactNativeWebView && typeof (window as any).ReactNativeWebView.postMessage === "function") {
         try {
           (window as any).ReactNativeWebView.postMessage(JSON.stringify({ type: "EXIT_APP" }));
@@ -2242,8 +2356,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
     closeFeeReceiptModal,
     closeNotifications,
     closeProfileDrawer,
-    changeTab,
-    changeHomeSubSection
+    changeTab
   ]);
 
   // Fetch classes & logs for the teacher-organization from the real MongoDB backend
