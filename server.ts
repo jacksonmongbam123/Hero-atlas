@@ -1754,39 +1754,43 @@ async function startServer() {
   }
 
   // Helper to build flexible date query conditions for BSON Date objects, ISO strings, YYYY-MM-DD
-  function buildDateFilterConditions(dateFilterStr: string) {
+  function buildDateFilterConditions(dateFilterInput: string | string[]) {
     const conditions: any[] = [];
-    const cleanStr = dateFilterStr.trim();
-    if (!cleanStr) return conditions;
+    const inputs = Array.isArray(dateFilterInput) ? dateFilterInput : [dateFilterInput];
 
-    // String / Regex match
-    conditions.push({ date: { $regex: `^${cleanStr}` } });
-    conditions.push({ attendanceDate: { $regex: `^${cleanStr}` } });
-    conditions.push({ date: cleanStr });
+    inputs.forEach(item => {
+      const cleanStr = String(item || "").trim();
+      if (!cleanStr) return;
 
-    // Date Object Range Match
-    if (cleanStr.length === 10) { // YYYY-MM-DD
-      const start = new Date(`${cleanStr}T00:00:00.000Z`);
-      const end = new Date(`${cleanStr}T23:59:59.999Z`);
-      if (!isNaN(start.getTime())) {
-        conditions.push({ date: { $gte: start, $lte: end } });
-        conditions.push({ attendanceDate: { $gte: start, $lte: end } });
-        conditions.push({ createdAt: { $gte: start, $lte: end } });
-        conditions.push({ updatedAt: { $gte: start, $lte: end } });
-      }
-    } else if (cleanStr.length === 7) { // YYYY-MM
-      const parts = cleanStr.split("-").map(Number);
-      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-        const start = new Date(Date.UTC(parts[0], parts[1] - 1, 1, 0, 0, 0, 0));
-        const end = new Date(Date.UTC(parts[0], parts[1], 0, 23, 59, 59, 999));
+      // String / Regex match
+      conditions.push({ date: { $regex: `^${cleanStr}` } });
+      conditions.push({ attendanceDate: { $regex: `^${cleanStr}` } });
+      conditions.push({ date: cleanStr });
+
+      // Date Object Range Match
+      if (cleanStr.length === 10) { // YYYY-MM-DD
+        const start = new Date(`${cleanStr}T00:00:00.000Z`);
+        const end = new Date(`${cleanStr}T23:59:59.999Z`);
         if (!isNaN(start.getTime())) {
           conditions.push({ date: { $gte: start, $lte: end } });
           conditions.push({ attendanceDate: { $gte: start, $lte: end } });
           conditions.push({ createdAt: { $gte: start, $lte: end } });
           conditions.push({ updatedAt: { $gte: start, $lte: end } });
         }
+      } else if (cleanStr.length === 7) { // YYYY-MM
+        const parts = cleanStr.split("-").map(Number);
+        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+          const start = new Date(Date.UTC(parts[0], parts[1] - 1, 1, 0, 0, 0, 0));
+          const end = new Date(Date.UTC(parts[0], parts[1], 0, 23, 59, 59, 999));
+          if (!isNaN(start.getTime())) {
+            conditions.push({ date: { $gte: start, $lte: end } });
+            conditions.push({ attendanceDate: { $gte: start, $lte: end } });
+            conditions.push({ createdAt: { $gte: start, $lte: end } });
+            conditions.push({ updatedAt: { $gte: start, $lte: end } });
+          }
+        }
       }
-    }
+    });
 
     return conditions;
   }
@@ -1862,6 +1866,19 @@ async function startServer() {
             attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
             status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
           }));
+        } else {
+          // Fallback query if specific student match yielded 0 records
+          const fallbackFilter = cleanDateFilter ? { $or: buildDateFilterConditions(cleanDateFilter) } : {};
+          let fallbackDocs = await mongo.collection("attendances").find(fallbackFilter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
+          if (fallbackDocs && fallbackDocs.length > 0) {
+            matches = fallbackDocs.map(d => ({
+              ...d,
+              studentID: String(d.studentID || d.student_id || d.studentId || ""),
+              date: formatToYMD(d.date || d.attendanceDate || d.attendance_date),
+              attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
+              status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
+            }));
+          }
         }
       }
     } catch (err) {
@@ -1928,11 +1945,22 @@ async function startServer() {
 
     const year = data.year;
     const month = data.month;
-    let prefix: string | null = null;
+    let prefixes: string[] = [];
     if (year !== undefined && month !== undefined && String(year) !== "" && String(month) !== "") {
-      const monthNum = Number(month) + 1;
-      prefix = `${year}-${String(monthNum).padStart(2, '0')}`;
+      const mVal = Number(month);
+      if (!isNaN(mVal)) {
+        const monthNum0 = mVal + 1;
+        if (monthNum0 >= 1 && monthNum0 <= 12) {
+          prefixes.push(`${year}-${String(monthNum0).padStart(2, '0')}`);
+        }
+        if (mVal >= 1 && mVal <= 12) {
+          prefixes.push(`${year}-${String(mVal).padStart(2, '0')}`);
+        }
+      } else if (typeof month === "string" && month.trim().length > 0) {
+        prefixes.push(`${year}-${month.trim().padStart(2, '0')}`);
+      }
     }
+    prefixes = Array.from(new Set(prefixes));
 
     let matches: any[] = [];
     let isMongoConnected = false;
@@ -1962,8 +1990,8 @@ async function startServer() {
             idConditions.push({ _id: { $in: tokenObjIds } });
           }
 
-          if (prefix) {
-            const dateConditions = buildDateFilterConditions(prefix);
+          if (prefixes.length > 0) {
+            const dateConditions = buildDateFilterConditions(prefixes);
             filter = {
               $and: [
                 { $or: idConditions },
@@ -1973,8 +2001,8 @@ async function startServer() {
           } else {
             filter = { $or: idConditions };
           }
-        } else if (prefix) {
-          filter = { $or: buildDateFilterConditions(prefix) };
+        } else if (prefixes.length > 0) {
+          filter = { $or: buildDateFilterConditions(prefixes) };
         }
 
         let docs = await mongo.collection("attendances").find(filter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
@@ -1987,8 +2015,9 @@ async function startServer() {
             attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
             status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
           }));
-        } else if (prefix) {
-          const fallbackFilter = { $or: buildDateFilterConditions(prefix) };
+        } else {
+          // Fallback query if specific student match yielded 0 records
+          const fallbackFilter = prefixes.length > 0 ? { $or: buildDateFilterConditions(prefixes) } : {};
           let fallbackDocs = await mongo.collection("attendances").find(fallbackFilter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
           if (fallbackDocs && fallbackDocs.length > 0) {
             console.log("[MongoDB Student Month Lookup] Fallback found docs:", fallbackDocs.length);
