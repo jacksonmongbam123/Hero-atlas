@@ -23,29 +23,30 @@ async function getMongoDb(): Promise<mongoose.mongo.Db | null> {
   const conn = mongoose.connection as any;
   const state = conn.readyState as number;
   if (state === 1) {
-    if (conn.client) return conn.client.db("test");
     if (conn.db) return conn.db;
+    if (conn.client) return conn.client.db();
   }
   if (state === 2) {
     for (let i = 0; i < 50; i++) {
       await new Promise(r => setTimeout(r, 100));
       if ((conn.readyState as number) === 1) {
-        if (conn.client) return conn.client.db("test");
         if (conn.db) return conn.db;
+        if (conn.client) return conn.client.db();
       }
     }
   }
   if (state === 0) {
     try {
       await mongoose.connect(MONGO_URI);
-      if (conn.client) return conn.client.db("test");
       if (conn.db) return conn.db;
+      if (conn.client) return conn.client.db();
     } catch (e) {
       console.warn("[getMongoDb] connection error:", e);
     }
   }
-  if (conn.client) return conn.client.db("test");
-  return conn.db || null;
+  if (conn.db) return conn.db;
+  if (conn.client) return conn.client.db();
+  return null;
 }
 
 const homeworkSchema = new mongoose.Schema({
@@ -2006,18 +2007,31 @@ async function startServer() {
     const year = data.year;
     const month = data.month;
     let prefixes: string[] = [];
-    if (year !== undefined && month !== undefined && String(year) !== "" && String(month) !== "") {
-      const mVal = Number(month);
-      if (!isNaN(mVal)) {
-        const monthNum0 = mVal + 1;
-        if (monthNum0 >= 1 && monthNum0 <= 12) {
+    if (year !== undefined && year !== null && String(year) !== "" && month !== undefined && month !== null && String(month) !== "") {
+      const parseMonthVal = (m: any): number | null => {
+        if (m === undefined || m === null || m === "") return null;
+        if (typeof m === "number" && !isNaN(m)) return m;
+        const s = String(m).trim().toLowerCase();
+        const num = parseInt(s, 10);
+        if (!isNaN(num)) return num;
+        const monthNames = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+        const monthAbbrs = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+        const idxFull = monthNames.indexOf(s);
+        if (idxFull !== -1) return idxFull + 1;
+        const idxAbbr = monthAbbrs.indexOf(s);
+        if (idxAbbr !== -1) return idxAbbr + 1;
+        return null;
+      };
+
+      const mVal = parseMonthVal(month);
+      if (mVal !== null) {
+        if (mVal >= 0 && mVal <= 11) {
+          const monthNum0 = mVal + 1;
           prefixes.push(`${year}-${String(monthNum0).padStart(2, '0')}`);
         }
         if (mVal >= 1 && mVal <= 12) {
           prefixes.push(`${year}-${String(mVal).padStart(2, '0')}`);
         }
-      } else if (typeof month === "string" && month.trim().length > 0) {
-        prefixes.push(`${year}-${month.trim().padStart(2, '0')}`);
       }
     }
     prefixes = Array.from(new Set(prefixes));
@@ -2031,6 +2045,13 @@ async function startServer() {
       if (mongo) {
         const expandedTokensSet = await expandStudentTokens(mongo, targetIds);
         const tokenList = Array.from(expandedTokensSet);
+        if (targetIds.length > 0) {
+          targetIds.forEach(t => {
+            if (t && !tokenList.includes(t.toLowerCase())) {
+              tokenList.push(t.toLowerCase());
+            }
+          });
+        }
 
         let filter: any = {};
         if (tokenList.length > 0) {
@@ -2038,6 +2059,11 @@ async function startServer() {
           const tokenObjIds = tokenList.filter(t => mongoose.Types.ObjectId.isValid(t)).map(t => new mongoose.Types.ObjectId(t));
 
           const idConditions: any[] = [
+            { studentID: { $in: tokenList } },
+            { student_id: { $in: tokenList } },
+            { studentId: { $in: tokenList } },
+            { student: { $in: tokenList } },
+            { reg_no: { $in: tokenList } },
             { studentID: { $in: tokenRegexes } },
             { student_id: { $in: tokenRegexes } },
             { studentId: { $in: tokenRegexes } },
@@ -2067,7 +2093,36 @@ async function startServer() {
         }
 
         let docs = await mongo.collection("attendances").find(filter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
-        if ((!docs || docs.length === 0) && targetIds.length === 0 && prefixes.length > 0) {
+        if ((!docs || docs.length === 0) && targetIds.length > 0) {
+          const rawRegexes = targetIds.map(t => new RegExp(`^${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
+          const rawObjIds = targetIds.filter(t => mongoose.Types.ObjectId.isValid(t)).map(t => new mongoose.Types.ObjectId(t));
+          const rawIdConds: any[] = [
+            { studentID: { $in: targetIds } },
+            { student_id: { $in: targetIds } },
+            { studentId: { $in: targetIds } },
+            { student: { $in: targetIds } },
+            { reg_no: { $in: targetIds } },
+            { studentID: { $in: rawRegexes } },
+            { student_id: { $in: rawRegexes } },
+            { studentId: { $in: rawRegexes } },
+            { student: { $in: rawRegexes } },
+            { reg_no: { $in: rawRegexes } }
+          ];
+          if (rawObjIds.length > 0) {
+            rawIdConds.push({ studentID: { $in: rawObjIds } });
+            rawIdConds.push({ student_id: { $in: rawObjIds } });
+            rawIdConds.push({ _id: { $in: rawObjIds } });
+          }
+
+          const rawFilter = prefixes.length > 0 ? {
+            $and: [
+              { $or: rawIdConds },
+              { $or: buildDateFilterConditions(prefixes) }
+            ]
+          } : { $or: rawIdConds };
+
+          docs = await mongo.collection("attendances").find(rawFilter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
+        } else if ((!docs || docs.length === 0) && targetIds.length === 0 && prefixes.length > 0) {
           const fallbackFilter = { $or: buildDateFilterConditions(prefixes) };
           docs = await mongo.collection("attendances").find(fallbackFilter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
         }

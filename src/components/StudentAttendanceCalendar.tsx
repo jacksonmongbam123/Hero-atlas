@@ -386,7 +386,7 @@ export function StudentAttendanceCalendar({
       setAttendanceMap(prev => {
         const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
         Object.entries(prev).forEach(([d, status]) => {
-          if (d.startsWith(monthPrefix) && status && !newMap[d]) {
+          if (!d.startsWith(monthPrefix) && status) {
             newMap[d] = status as "present" | "absent" | "late";
           }
         });
