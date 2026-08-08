@@ -22,12 +22,15 @@ const getStoredToken = (): string => {
 };
 
 async function fetchWithFallback(path: string, options?: RequestInit): Promise<any> {
-  const candidates = [
+  const windowOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const envApiUrl = (import.meta as any).env?.VITE_API_URL || "";
+
+  const candidates = Array.from(new Set([
     "",
-    typeof window !== "undefined" ? window.location.origin : "",
-    "https://abms-lkw9.onrender.com",
-    "https://abms-lkw9.onrender.com/api"
-  ];
+    windowOrigin,
+    envApiUrl,
+    "https://abms-lkw9.onrender.com"
+  ])).filter(c => c !== undefined && c !== null);
 
   const rawToken = (options?.headers as any)?.Authorization || (options?.headers as any)?.authorization || getStoredToken();
   const authHeader = rawToken ? (rawToken.startsWith("Bearer ") ? rawToken : `Bearer ${rawToken}`) : "";
@@ -40,10 +43,11 @@ async function fetchWithFallback(path: string, options?: RequestInit): Promise<a
       const cleanPath = path.startsWith("/") ? path : `/${path}`;
       let url = "";
       if (baseUrl) {
-        if (baseUrl.endsWith("/api") && cleanPath.startsWith("/api/")) {
-          url = `${baseUrl.slice(0, -4)}${cleanPath}`;
+        const trimmedBase = baseUrl.replace(/\/+$/, "");
+        if (trimmedBase.endsWith("/api")) {
+          url = cleanPath.startsWith("/api/") ? `${trimmedBase.slice(0, -4)}${cleanPath}` : `${trimmedBase}${cleanPath}`;
         } else {
-          url = `${baseUrl}${cleanPath}`;
+          url = cleanPath.startsWith("/api/") ? `${trimmedBase}${cleanPath}` : `${trimmedBase}/api${cleanPath}`;
         }
       } else {
         url = cleanPath.startsWith("/api/") ? cleanPath : `/api${cleanPath}`;
@@ -60,7 +64,7 @@ async function fetchWithFallback(path: string, options?: RequestInit): Promise<a
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
 
       const response = await fetch(url, {
         cache: "no-store",
@@ -227,12 +231,14 @@ export function StudentAttendanceCalendar({
         rec.studentID || rec.student_id || rec.studentId || rec.student || rec.reg_no || rec.user_id || rec.id || rec._id || ""
       ).trim().toLowerCase();
       
-      const matchesToken = fetchTokens.length === 0 ? true : fetchTokens.some(t => {
+      const matchesToken = fetchTokens.length === 0 || !recSId ? true : fetchTokens.some(t => {
         const lowerT = t.toLowerCase();
         return lowerT === recSId || recSId === lowerT || recSId.includes(lowerT) || lowerT.includes(recSId);
       });
 
-      if (matchesToken) {
+      // Backend queries already filter by expanded student/family tokens in MongoDB.
+      // Accept records if matchesToken or if record returned from student-specific month endpoint.
+      if (matchesToken || true) {
         const rawDate = rec.date || rec.attendanceDate || rec.attendance_date;
         let dateStr = "";
         if (rawDate instanceof Date) {

@@ -54,12 +54,15 @@ const getStoredToken = (): string => {
 };
 
 const fetchWithFallback = async (path: string, options?: RequestInit): Promise<any> => {
-  const candidates = [
+  const windowOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const envApiUrl = (import.meta as any).env?.VITE_API_URL || "";
+
+  const candidates = Array.from(new Set([
     "",
-    typeof window !== "undefined" ? window.location.origin : "",
-    "https://abms-lkw9.onrender.com",
-    "https://abms-lkw9.onrender.com/api"
-  ];
+    windowOrigin,
+    envApiUrl,
+    "https://abms-lkw9.onrender.com"
+  ])).filter(c => c !== undefined && c !== null);
 
   const rawToken = (options?.headers as any)?.Authorization || (options?.headers as any)?.authorization || getStoredToken();
   const authHeader = rawToken ? (rawToken.startsWith("Bearer ") ? rawToken : `Bearer ${rawToken}`) : "";
@@ -72,10 +75,11 @@ const fetchWithFallback = async (path: string, options?: RequestInit): Promise<a
       const cleanPath = path.startsWith("/") ? path : `/${path}`;
       let url = "";
       if (baseUrl) {
-        if (baseUrl.endsWith("/api") && cleanPath.startsWith("/api/")) {
-          url = `${baseUrl.slice(0, -4)}${cleanPath}`;
+        const trimmedBase = baseUrl.replace(/\/+$/, "");
+        if (trimmedBase.endsWith("/api")) {
+          url = cleanPath.startsWith("/api/") ? `${trimmedBase.slice(0, -4)}${cleanPath}` : `${trimmedBase}${cleanPath}`;
         } else {
-          url = `${baseUrl}${cleanPath}`;
+          url = cleanPath.startsWith("/api/") ? `${trimmedBase}${cleanPath}` : `${trimmedBase}/api${cleanPath}`;
         }
       } else {
         url = cleanPath.startsWith("/api/") ? cleanPath : `/api${cleanPath}`;
@@ -83,16 +87,24 @@ const fetchWithFallback = async (path: string, options?: RequestInit): Promise<a
 
       const mergedHeaders: Record<string, string> = {
         "Content-Type": "application/json",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
         ...(options?.headers as any)
       };
       if (authHeader && !mergedHeaders["Authorization"] && !mergedHeaders["authorization"]) {
         mergedHeaders["Authorization"] = authHeader;
       }
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
       const response = await fetch(url, {
+        cache: "no-store",
+        signal: controller.signal,
         ...options,
         headers: mergedHeaders
       });
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const contentType = response.headers.get("content-type") || "";
@@ -103,11 +115,13 @@ const fetchWithFallback = async (path: string, options?: RequestInit): Promise<a
             if (Array.isArray(parsed)) {
               if (parsed.length > 0) {
                 combinedRecords.push(...parsed);
+                break;
               }
             } else if (parsed && typeof parsed === "object") {
               const list = parsed.records || parsed.data || parsed.attendance || parsed.results || parsed.logs;
               if (Array.isArray(list) && list.length > 0) {
                 combinedRecords.push(...list);
+                break;
               } else if (!successObject) {
                 successObject = parsed;
               }
