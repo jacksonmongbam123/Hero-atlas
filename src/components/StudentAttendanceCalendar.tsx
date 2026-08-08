@@ -32,8 +32,9 @@ async function fetchWithFallback(path: string, options?: RequestInit): Promise<a
     "https://abms-lkw9.onrender.com"
   ])).filter(c => c !== undefined && c !== null);
 
-  const rawToken = (options?.headers as any)?.Authorization || (options?.headers as any)?.authorization || getStoredToken();
-  const authHeader = rawToken ? (rawToken.startsWith("Bearer ") ? rawToken : `Bearer ${rawToken}`) : "";
+  const rawToken = (options?.headers as any)?.Authorization || (options?.headers as any)?.authorization || (options?.headers as any)?.["x-access-token"] || getStoredToken();
+  const cleanTok = rawToken ? String(rawToken).replace(/^Bearer\s+/i, "").trim() : "";
+  const authHeader = cleanTok ? `Bearer ${cleanTok}` : "";
 
   const combinedRecords: any[] = [];
   let successObject: any = null;
@@ -41,64 +42,82 @@ async function fetchWithFallback(path: string, options?: RequestInit): Promise<a
   for (const baseUrl of candidates) {
     try {
       const cleanPath = path.startsWith("/") ? path : `/${path}`;
-      let url = "";
+      const urlsToTry: string[] = [];
+
       if (baseUrl) {
         const trimmedBase = baseUrl.replace(/\/+$/, "");
-        if (trimmedBase.endsWith("/api")) {
-          url = cleanPath.startsWith("/api/") ? `${trimmedBase.slice(0, -4)}${cleanPath}` : `${trimmedBase}${cleanPath}`;
+        if (cleanPath.startsWith("/api/")) {
+          urlsToTry.push(`${trimmedBase}${cleanPath}`);
+          urlsToTry.push(`${trimmedBase}${cleanPath.slice(4)}`);
         } else {
-          url = cleanPath.startsWith("/api/") ? `${trimmedBase}${cleanPath}` : `${trimmedBase}/api${cleanPath}`;
+          urlsToTry.push(`${trimmedBase}${cleanPath}`);
+          urlsToTry.push(`${trimmedBase}/api${cleanPath}`);
         }
       } else {
-        url = cleanPath.startsWith("/api/") ? cleanPath : `/api${cleanPath}`;
+        urlsToTry.push(cleanPath.startsWith("/api/") ? cleanPath : `/api${cleanPath}`);
+        urlsToTry.push(cleanPath);
       }
 
-      const mergedHeaders: Record<string, string> = {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        ...(options?.headers as any)
-      };
-      if (authHeader && !mergedHeaders["Authorization"] && !mergedHeaders["authorization"]) {
-        mergedHeaders["Authorization"] = authHeader;
-      }
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-      const response = await fetch(url, {
-        cache: "no-store",
-        signal: controller.signal,
-        ...options,
-        headers: mergedHeaders
-      });
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        const contentType = response.headers.get("content-type") || "";
-        const text = await response.text();
-        if (text && !contentType.includes("html") && !text.trim().startsWith("<!") && !text.trim().startsWith("<html")) {
-          try {
-            const parsed = JSON.parse(text);
-            if (Array.isArray(parsed)) {
-              if (parsed.length > 0) {
-                combinedRecords.push(...parsed);
-                break;
-              }
-            } else if (parsed && typeof parsed === "object") {
-              const list = parsed.records || parsed.data || parsed.attendance || parsed.results || parsed.logs;
-              if (Array.isArray(list) && list.length > 0) {
-                combinedRecords.push(...list);
-                break;
-              } else if (!successObject) {
-                successObject = parsed;
-              }
+      for (const url of urlsToTry) {
+        try {
+          const mergedHeaders: Record<string, string> = {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            ...(options?.headers as any)
+          };
+          if (cleanTok) {
+            if (!mergedHeaders["Authorization"] && !mergedHeaders["authorization"]) {
+              mergedHeaders["Authorization"] = authHeader;
             }
-          } catch {}
+            if (!mergedHeaders["x-access-token"]) {
+              mergedHeaders["x-access-token"] = cleanTok;
+            }
+          }
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+          const response = await fetch(url, {
+            cache: "no-store",
+            signal: controller.signal,
+            ...options,
+            headers: mergedHeaders
+          });
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            const contentType = response.headers.get("content-type") || "";
+            const text = await response.text();
+            if (text && !contentType.includes("html") && !text.trim().startsWith("<!") && !text.trim().startsWith("<html")) {
+              try {
+                const parsed = JSON.parse(text);
+                if (Array.isArray(parsed)) {
+                  if (parsed.length > 0) {
+                    combinedRecords.push(...parsed);
+                    break;
+                  }
+                } else if (parsed && typeof parsed === "object") {
+                  const list = parsed.records || parsed.data || parsed.attendance || parsed.results || parsed.logs;
+                  if (Array.isArray(list) && list.length > 0) {
+                    combinedRecords.push(...list);
+                    break;
+                  } else if (!successObject) {
+                    successObject = parsed;
+                  }
+                }
+              } catch {}
+            }
+          }
+        } catch {
+          // continue
         }
       }
-    } catch (err) {
-      // continue to next candidate
+      if (combinedRecords.length > 0) {
+        break;
+      }
+    } catch {
+      // continue
     }
   }
 
@@ -219,8 +238,13 @@ export function StudentAttendanceCalendar({
     if (!isBackground) setLoading(true);
     const newMap: Record<string, "present" | "absent" | "late"> = {};
 
-    const rawToken = token || user?.token || "";
-    const authToken = rawToken ? (rawToken.startsWith("Bearer ") ? rawToken : `Bearer ${rawToken}`) : "";
+    const rawToken = token || user?.token || getStoredToken();
+    const cleanTok = rawToken ? String(rawToken).replace(/^Bearer\s+/i, "").trim() : "";
+    const authHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    if (cleanTok) {
+      authHeaders["Authorization"] = `Bearer ${cleanTok}`;
+      authHeaders["x-access-token"] = cleanTok;
+    }
 
     const fetchTokens = studentTokens;
 
@@ -301,16 +325,19 @@ export function StudentAttendanceCalendar({
     };
 
     try {
-      // 1. Fetch from local backend /api/attendance/student_month passing all tokens (primary source connected to MongoDB attendances schema)
+      // 1. Fetch from backend /attendance/student_month
       try {
         const records = await fetchWithFallback("/attendance/student_month", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders,
           body: JSON.stringify({
             studentIDs: fetchTokens,
             studentID: primaryStudentId,
+            student_id: primaryStudentId,
             year: selectedYear,
-            month: selectedMonth
+            month: selectedMonth,
+            monthNum: selectedMonth + 1,
+            token: cleanTok
           })
         }).catch(() => null);
 
@@ -325,19 +352,22 @@ export function StudentAttendanceCalendar({
 
         sortRecordsByTimestamp(list).forEach((r: any) => applyRecord(r));
       } catch (err) {
-        console.warn("Local month attendance fetch warning:", err);
+        console.warn("Month attendance fetch warning:", err);
       }
 
-      // 2. Fetch local lookup for student ID tokens
+      // 2. Fetch lookup for student ID tokens
       try {
         const records = await fetchWithFallback("/class/attendance/lookup", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders,
           body: JSON.stringify({
             studentIDs: fetchTokens,
             studentID: primaryStudentId,
+            student_id: primaryStudentId,
             year: selectedYear,
-            month: selectedMonth
+            month: selectedMonth,
+            monthNum: selectedMonth + 1,
+            token: cleanTok
           })
         }).catch(() => null);
 
