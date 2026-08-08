@@ -3,8 +3,33 @@ import IdentityGateway from "./components/IdentityGateway";
 import PortalDashboard from "./components/PortalDashboard";
 
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    try {
+      if (typeof localStorage !== "undefined") {
+        const storedUser = localStorage.getItem("currentUser");
+        if (storedUser) {
+          return JSON.parse(storedUser);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load stored user from localStorage", e);
+    }
+    return null;
+  });
+
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    try {
+      if (typeof localStorage !== "undefined") {
+        const storedUser = localStorage.getItem("currentUser");
+        const storedToken = localStorage.getItem("token") || localStorage.getItem("userToken");
+        return !!(storedUser && (storedToken || JSON.parse(storedUser)?.token));
+      }
+    } catch (e) {
+      // ignore
+    }
+    return false;
+  });
+
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
       if (typeof localStorage !== "undefined") {
@@ -27,10 +52,39 @@ export default function App() {
     }
   }, [theme]);
 
+  const handleLoginSuccess = (role: string, name: string, token: string, user: any) => {
+    const userWithToken = { ...user, token };
+    setIsLoggedIn(true);
+    setCurrentUser(userWithToken);
+
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("currentUser", JSON.stringify(userWithToken));
+        if (token) {
+          localStorage.setItem("token", token);
+          localStorage.setItem("userToken", token);
+          localStorage.setItem("authToken", token);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to save session to localStorage", e);
+    }
+  };
+
   // Terminate secure session
   const handleLogout = () => {
     setIsLoggedIn(false);
     setCurrentUser(null);
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.removeItem("currentUser");
+        localStorage.removeItem("token");
+        localStorage.removeItem("userToken");
+        localStorage.removeItem("authToken");
+      }
+    } catch (e) {
+      console.error("Failed to clear session from localStorage", e);
+    }
   };
 
   const toggleTheme = () => {
@@ -43,11 +97,7 @@ export default function App() {
         <IdentityGateway 
           theme={theme}
           onToggleTheme={toggleTheme}
-          onSuccess={(role, name, token, user) => {
-            setIsLoggedIn(true);
-            // Include the token inside the user object so the dashboard can make authenticated requests
-            setCurrentUser({ ...user, token });
-          }}
+          onSuccess={handleLoginSuccess}
         />
       ) : (
         <PortalDashboard 
