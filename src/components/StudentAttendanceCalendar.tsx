@@ -136,6 +136,10 @@ export function StudentAttendanceCalendar({
   const [attendanceMap, setAttendanceMap] = useState<Record<string, "present" | "absent" | "late">>({});
   const [loading, setLoading] = useState<boolean>(false);
 
+  const userRole = (user?.user_type || user?.role || "student").toLowerCase();
+  const canEdit = userRole === "teacher" || userRole === "admin";
+  const [selectedDayDetail, setSelectedDayDetail] = useState<string | null>(null);
+
   const months = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
@@ -239,13 +243,17 @@ export function StudentAttendanceCalendar({
         }
 
         if (dateStr && dateStr.length >= 10) {
-          const isPresent = rec.attended === true || rec.attended === "true" || String(rec.status).toLowerCase() === "present" || String(rec.status).toLowerCase() === "late" || String(rec.status).toLowerCase() === "p";
-          const isLate = String(rec.status).toLowerCase() === "late";
+          const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
+          const isLate = statusLower === "late";
+          const isAbsent = statusLower === "absent" || rec.attended === false || rec.attended === "false" || rec.attended === 0 || rec.attended === "0";
+          const isPresent = statusLower === "present" || statusLower === "p" || rec.attended === true || rec.attended === "true" || rec.attended === 1 || rec.attended === "1";
 
-          if (isPresent) {
-            newMap[dateStr] = isLate ? "late" : "present";
-          } else if (rec.attended === false || rec.attended === "false" || String(rec.status).toLowerCase() === "absent") {
+          if (isLate) {
+            newMap[dateStr] = "late";
+          } else if (isAbsent) {
             newMap[dateStr] = "absent";
+          } else if (isPresent) {
+            newMap[dateStr] = "present";
           }
         }
       }
@@ -393,6 +401,13 @@ export function StudentAttendanceCalendar({
   };
 
   const handleDayClick = async (dateStr: string) => {
+    setSelectedDayDetail(dateStr);
+
+    // Students and Parents CANNOT post attendance to the database. Attendance editing is strictly for teachers/admins.
+    if (!canEdit) {
+      return;
+    }
+
     const currentStatus = attendanceMap[dateStr];
     let nextStatus: "present" | "absent" | "late" = "present";
     if (currentStatus === "present") nextStatus = "absent";
@@ -649,13 +664,24 @@ export function StudentAttendanceCalendar({
               today.getDate() === dayNum;
 
             const status = attendanceMap[dateStr];
+            const isSelected = selectedDayDetail === dateStr;
 
             return (
               <div
                 key={dateStr}
                 onClick={() => handleDayClick(dateStr)}
-                title={`Click to toggle status for ${dateStr} (Current: ${status || "None"})`}
-                className="aspect-square p-0 flex flex-col justify-between relative select-none bg-slate-950/40 border border-slate-800/60 rounded-xl overflow-hidden hover:border-indigo-500/50 active:scale-95 transition-all cursor-pointer group"
+                title={
+                  canEdit
+                    ? `Click to toggle status for ${dateStr} (Current: ${status || "None"})`
+                    : `Date: ${dateStr} - Status: ${status ? status.toUpperCase() : "No record"}`
+                }
+                className={`aspect-square p-0 flex flex-col justify-between relative select-none bg-slate-950/40 border transition-all ${
+                  isSelected ? "border-indigo-500 ring-1 ring-indigo-500/50" : "border-slate-800/60"
+                } rounded-xl overflow-hidden ${
+                  canEdit
+                    ? "hover:border-indigo-500/50 active:scale-95 cursor-pointer group"
+                    : "cursor-pointer hover:border-slate-700/80"
+                }`}
               >
                 {/* Small Date Number */}
                 <div className="w-full flex items-center justify-between text-xs font-semibold font-mono pt-1.5 px-2">
@@ -683,8 +709,37 @@ export function StudentAttendanceCalendar({
         </div>
       </div>
 
+      {/* Selected Day Inspection Detail Card */}
+      {selectedDayDetail && (
+        <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between gap-4 animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className={`w-3 h-3 rounded-full ${
+              attendanceMap[selectedDayDetail] === "present" ? "bg-emerald-500 shadow-sm shadow-emerald-500/50" :
+              attendanceMap[selectedDayDetail] === "absent" ? "bg-rose-500 shadow-sm shadow-rose-500/50" :
+              attendanceMap[selectedDayDetail] === "late" ? "bg-amber-500 shadow-sm shadow-amber-500/50" : "bg-slate-600"
+            }`} />
+            <div>
+              <p className="text-xs font-bold text-slate-200 font-mono">
+                Attendance Record: {selectedDayDetail}
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Status: <span className="font-semibold text-slate-100 capitalize">{attendanceMap[selectedDayDetail] || "No Record Logged"}</span>
+                {!canEdit && <span className="text-slate-500 ml-2">(Student Read-Only View)</span>}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedDayDetail(null)}
+            className="text-[11px] font-semibold text-slate-400 hover:text-slate-200 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 cursor-pointer transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      )}
+
       {/* Minimal Footer Legend */}
-      <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800/60 text-xs text-slate-400">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-800/60 text-xs text-slate-400">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5 font-medium">
             <span className="w-2.5 h-1 bg-emerald-500 rounded-sm"></span> Present
@@ -696,6 +751,11 @@ export function StudentAttendanceCalendar({
             <span className="w-2.5 h-1 bg-amber-500 rounded-sm"></span> Late
           </span>
         </div>
+        {!canEdit && (
+          <span className="text-[10px] text-slate-500 italic">
+            Note: Attendance ledger is managed by class instructors. Students view verified records only.
+          </span>
+        )}
       </div>
     </div>
   );

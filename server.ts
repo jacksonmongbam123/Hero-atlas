@@ -1541,12 +1541,16 @@ async function startServer() {
     try {
       const mongo = await getMongoDb();
       if (mongo && processed.length > 0) {
-        const bulkOps = processed.map(rec => {
+        const bulkOps = await Promise.all(processed.map(async rec => {
           const sId = rec.studentID;
           const dateStr = rec.date;
           const bsonDate = new Date(`${dateStr}T00:00:00.000Z`);
           
-          const tokens = Array.from(new Set([sId].filter(Boolean)));
+          const expandedTokensSet = await expandStudentTokens(mongo, [sId]);
+          const tokens = Array.from(expandedTokensSet);
+          if (sId && !tokens.includes(sId.toLowerCase())) {
+            tokens.push(sId.toLowerCase());
+          }
           const tokenRegexes = tokens.map(t => new RegExp(`^${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
           const tokenObjIds = tokens.filter(t => mongoose.Types.ObjectId.isValid(t)).map(t => new mongoose.Types.ObjectId(t));
           const allIdMatches = [...tokenRegexes, ...tokenObjIds];
@@ -1557,6 +1561,7 @@ async function startServer() {
                 $or: [
                   { studentID: { $in: allIdMatches }, date: { $regex: `^${dateStr}` } },
                   { student_id: { $in: allIdMatches }, date: { $regex: `^${dateStr}` } },
+                  { studentId: { $in: allIdMatches }, date: { $regex: `^${dateStr}` } },
                   { studentID: { $in: allIdMatches }, date: bsonDate },
                   { student_id: { $in: allIdMatches }, date: bsonDate },
                   { studentID: { $in: allIdMatches }, attendanceDate: dateStr },
@@ -1577,7 +1582,7 @@ async function startServer() {
               upsert: true
             }
           };
-        });
+        }));
         await mongo.collection("attendances").bulkWrite(bulkOps as any);
       }
     } catch (err) {

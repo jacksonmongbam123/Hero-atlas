@@ -491,8 +491,14 @@ function UnusedStudentAttendanceCalendar({
               res.forEach((rec: any) => {
                 const dateStr = String(rec.date || rec.attendanceDate || rec.attendance_date || "").split("T")[0];
                 if (dateStr) {
-                  const isPresent = rec.attended === true || rec.attended === "true" || String(rec.status).toLowerCase() === "present" || String(rec.status).toLowerCase() === "late" || String(rec.status).toLowerCase() === "p";
-                  newMap[dateStr] = isPresent ? "present" : "absent";
+                  const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
+                  if (statusLower === "late") {
+                    newMap[dateStr] = "late";
+                  } else if (statusLower === "absent" || rec.attended === false || rec.attended === "false" || rec.attended === 0) {
+                    newMap[dateStr] = "absent";
+                  } else if (statusLower === "present" || statusLower === "p" || rec.attended === true || rec.attended === "true" || rec.attended === 1) {
+                    newMap[dateStr] = "present";
+                  }
                 }
               });
             }
@@ -519,8 +525,14 @@ function UnusedStudentAttendanceCalendar({
           records.forEach((rec: any) => {
             const dateVal = String(rec.date || rec.attendanceDate || rec.attendance_date || "").split("T")[0];
             if (dateVal) {
-              const isPresent = rec.attended === true || rec.attended === "true" || String(rec.status).toLowerCase() === "present" || String(rec.status).toLowerCase() === "late" || String(rec.status).toLowerCase() === "p";
-              newMap[dateVal] = isPresent ? "present" : "absent";
+              const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
+              if (statusLower === "late") {
+                newMap[dateVal] = "late";
+              } else if (statusLower === "absent" || rec.attended === false || rec.attended === "false" || rec.attended === 0) {
+                newMap[dateVal] = "absent";
+              } else if (statusLower === "present" || statusLower === "p" || rec.attended === true || rec.attended === "true" || rec.attended === 1) {
+                newMap[dateVal] = "present";
+              }
             }
           });
         }
@@ -545,8 +557,14 @@ function UnusedStudentAttendanceCalendar({
           records.forEach((rec: any) => {
             const dateVal = String(rec.date || rec.attendanceDate || rec.attendance_date || "").split("T")[0];
             if (dateVal) {
-              const isPresent = rec.attended === true || rec.attended === "true" || String(rec.status).toLowerCase() === "present" || String(rec.status).toLowerCase() === "late" || String(rec.status).toLowerCase() === "p";
-              newMap[dateVal] = isPresent ? "present" : "absent";
+              const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
+              if (statusLower === "late") {
+                newMap[dateVal] = "late";
+              } else if (statusLower === "absent" || rec.attended === false || rec.attended === "false" || rec.attended === 0) {
+                newMap[dateVal] = "absent";
+              } else if (statusLower === "present" || statusLower === "p" || rec.attended === true || rec.attended === "true" || rec.attended === 1) {
+                newMap[dateVal] = "present";
+              }
             }
           });
         }

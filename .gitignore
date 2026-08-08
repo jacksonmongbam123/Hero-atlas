@@ -6,5 +6,3 @@ coverage/
 *.log
 .env*
 !.env.example
-_school_temp/
-_hero_atlas_temp/
