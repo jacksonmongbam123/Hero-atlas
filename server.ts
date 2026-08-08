@@ -2047,9 +2047,9 @@ async function startServer() {
 
           const matchesId = targetLower.some(tId => itemTokens.includes(tId));
           if (!matchesId) return false;
-          if (prefix) {
+          if (prefixes && prefixes.length > 0) {
             const recDate = formatToYMD(a.date || a.attendanceDate);
-            return recDate.startsWith(prefix);
+            return prefixes.some((p: string) => recDate.startsWith(p));
           }
           return true;
         });
