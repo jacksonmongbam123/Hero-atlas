@@ -219,13 +219,8 @@ export function StudentAttendanceCalendar({
     if (!isBackground) setLoading(true);
     const newMap: Record<string, "present" | "absent" | "late"> = {};
 
-    const rawToken = token || user?.token || localStorage.getItem("token") || localStorage.getItem("userToken") || localStorage.getItem("authToken") || "";
-    const cleanTok = rawToken.replace(/^Bearer\s+/i, "").trim();
-    const authHeaders: Record<string, string> = { "Content-Type": "application/json" };
-    if (cleanTok) {
-      authHeaders["Authorization"] = `Bearer ${cleanTok}`;
-      authHeaders["x-access-token"] = cleanTok;
-    }
+    const rawToken = token || user?.token || "";
+    const authToken = rawToken ? (rawToken.startsWith("Bearer ") ? rawToken : `Bearer ${rawToken}`) : "";
 
     const fetchTokens = studentTokens;
 
@@ -310,14 +305,12 @@ export function StudentAttendanceCalendar({
       try {
         const records = await fetchWithFallback("/attendance/student_month", {
           method: "POST",
-          headers: authHeaders,
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             studentIDs: fetchTokens,
             studentID: primaryStudentId,
-            student_id: primaryStudentId,
             year: selectedYear,
-            month: selectedMonth,
-            token: cleanTok
+            month: selectedMonth
           })
         }).catch(() => null);
 
@@ -339,14 +332,12 @@ export function StudentAttendanceCalendar({
       try {
         const records = await fetchWithFallback("/class/attendance/lookup", {
           method: "POST",
-          headers: authHeaders,
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             studentIDs: fetchTokens,
             studentID: primaryStudentId,
-            student_id: primaryStudentId,
             year: selectedYear,
-            month: selectedMonth,
-            token: cleanTok
+            month: selectedMonth
           })
         }).catch(() => null);
 

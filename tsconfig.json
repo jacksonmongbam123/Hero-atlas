@@ -24,7 +24,10 @@
     "noEmit": true
   },
   "exclude": [
-    "src/**/*.native.tsx",
-    "android"
+    "_hero_atlas_temp",
+    "_school_temp",
+    "dist",
+    "node_modules",
+    "src/App.native.tsx"
   ]
 }
