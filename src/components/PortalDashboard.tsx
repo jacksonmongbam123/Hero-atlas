@@ -2305,11 +2305,11 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
     }
   };
 
-  // Expose global hardware back handler for Android Native WebView
+  // Expose global hardware back handler for Android Native WebView & Capacitor APK
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    (window as any).handleAndroidBack = () => {
+    const handleHardwareBack = (): boolean => {
       if (selectedFeeReceipt) {
         closeFeeReceiptModal();
         return true;
@@ -2343,8 +2343,27 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       return false;
     };
 
+    (window as any).handleAndroidBack = handleHardwareBack;
+
+    let capListenerHandler: any = null;
+    try {
+      import("@capacitor/app").then(({ App: CapApp }) => {
+        CapApp.addListener("backButton", () => {
+          const handled = handleHardwareBack();
+          if (!handled) {
+            CapApp.exitApp();
+          }
+        }).then((handler) => {
+          capListenerHandler = handler;
+        }).catch(() => {});
+      }).catch(() => {});
+    } catch (e) {}
+
     return () => {
       delete (window as any).handleAndroidBack;
+      if (capListenerHandler && typeof capListenerHandler.remove === "function") {
+        capListenerHandler.remove();
+      }
     };
   }, [
     selectedFeeReceipt,
