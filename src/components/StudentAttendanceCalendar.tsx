@@ -171,30 +171,26 @@ export function StudentAttendanceCalendar({
 
   const years = Array.from({ length: 8 }, (_, i) => 2023 + i);
 
-  // Student identification tokens (collects both custom studentID e.g. "4678" AND MongoDB _id/id e.g. "6a5cf221dd10dd1d4c38f0e2")
+  // Keep attendance identifiers separate from profile/display fields. The school
+  // backend stores attendance against the MongoDB student id, not the login
+  // username, phone number, or display name.
   const studentTokens = useMemo(() => {
     const set = new Set<string>();
 
     const collectFromObject = (obj: any) => {
       if (!obj || typeof obj !== "object") return;
       [
+        obj._id,
+        obj.user_id,
         obj.studentID,
         obj.student_id,
         obj.studentId,
         obj.id,
-        obj._id,
         obj.reg_no,
         obj.rollNo,
         obj.username,
-        obj.phone,
-        obj.email,
-        obj.user_id,
-        obj.user_type_id,
         obj.nic,
-        obj.passport,
-        obj.first_name,
-        obj.last_name,
-        obj.name
+        obj.phone
       ].forEach(val => {
         if (val !== undefined && val !== null) {
           const s = String(val).trim();
@@ -232,7 +228,20 @@ export function StudentAttendanceCalendar({
     return Array.from(set);
   }, [user, parentUser]);
 
-  const primaryStudentId = studentTokens[0] || user?.id || user?._id || user?.nic || "";
+  // Always query the canonical backend id first. This prevents production from
+  // issuing a request for every profile field and then timing out before the
+  // real attendance request completes.
+  const primaryStudentId = String(
+    user?._id ||
+    user?.user_id ||
+    user?.student_id ||
+    user?.studentID ||
+    user?.studentId ||
+    studentTokens[0] ||
+    user?.id ||
+    user?.nic ||
+    ""
+  ).trim();
 
   // Fetch attendance for the selected year and month strictly from database
   const fetchMonthAttendance = useCallback(async (isBackground = false) => {
@@ -247,7 +256,7 @@ export function StudentAttendanceCalendar({
       authHeaders["x-access-token"] = cleanTok;
     }
 
-    const fetchTokens = studentTokens;
+    const fetchTokens = Array.from(new Set([primaryStudentId, ...studentTokens].filter(Boolean)));
 
     // Helper to format any date representation to YYYY-MM-DD
     const parseToYMD = (val: any): string => {
@@ -288,30 +297,30 @@ export function StudentAttendanceCalendar({
         rec.studentID || rec.student_id || rec.studentId || rec.student || rec.reg_no || rec.user_id || rec.id || rec._id || ""
       ).trim().toLowerCase();
       
-      const matchesToken = fetchTokens.length === 0 || !recSId ? true : fetchTokens.some(t => {
+      const matchesToken = fetchTokens.length === 0 || !recSId ? false : fetchTokens.some(t => {
         const lowerT = t.toLowerCase();
         return lowerT === recSId || recSId === lowerT || recSId.includes(lowerT) || lowerT.includes(recSId);
       });
 
-      // Backend queries already filter by expanded student/family tokens in MongoDB.
-      // Accept records if matchesToken or if record returned from student-specific month endpoint.
-      if (matchesToken || true) {
-        const rawDate = rec.date || rec.attendanceDate || rec.attendance_date;
-        const dateStr = parseToYMD(rawDate);
+      // Do not let an unfiltered fallback response overwrite this student's
+      // calendar with another student's attendance.
+      if (!matchesToken) return;
 
-        if (dateStr && dateStr.length >= 10) {
-          const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
-          const isLate = statusLower === "late";
-          const isAbsent = statusLower === "absent" || rec.attended === false || rec.attended === "false" || rec.attended === 0 || rec.attended === "0";
-          const isPresent = statusLower === "present" || statusLower === "p" || rec.attended === true || rec.attended === "true" || rec.attended === 1 || rec.attended === "1";
+      const rawDate = rec.attendanceDate || rec.attendance_date || rec.date;
+      const dateStr = parseToYMD(rawDate);
 
-          if (isLate) {
-            newMap[dateStr] = "late";
-          } else if (isAbsent) {
-            newMap[dateStr] = "absent";
-          } else if (isPresent) {
-            newMap[dateStr] = "present";
-          }
+      if (dateStr && dateStr.length >= 10) {
+        const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
+        const isLate = statusLower === "late";
+        const isAbsent = statusLower === "absent" || rec.attended === false || rec.attended === "false" || rec.attended === 0 || rec.attended === "0";
+        const isPresent = statusLower === "present" || statusLower === "p" || rec.attended === true || rec.attended === "true" || rec.attended === 1 || rec.attended === "1";
+
+        if (isLate) {
+          newMap[dateStr] = "late";
+        } else if (isAbsent) {
+          newMap[dateStr] = "absent";
+        } else if (isPresent) {
+          newMap[dateStr] = "present";
         }
       }
     };
@@ -334,36 +343,39 @@ export function StudentAttendanceCalendar({
       const dates = Array.from({ length: monthDays }, (_, index) => (
         `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}-${String(index + 1).padStart(2, "0")}`
       ));
-      const ids = Array.from(new Set([
-        primaryStudentId,
-        user?.studentID,
-        user?.student_id,
-        user?.studentId,
-        user?.reg_no,
-        user?.rollNo,
-        user?.id,
-        user?._id
-      ].filter(Boolean).map(value => String(value).trim())));
+      const aliases = fetchTokens.filter(id => id !== primaryStudentId);
+      const fetchForId = async (studentId: string) => {
+        const requests = dates.map(async date => {
+          try {
+            const response = await fetch(`${SCHOOL_BACKEND_URL}/class/attendance/lookup`, {
+              method: "POST",
+              headers: authHeaders,
+              body: JSON.stringify({ studentID: studentId, date }),
+              cache: "no-store"
+            });
 
-      const requests = ids.flatMap(studentId => dates.map(async date => {
-        try {
-          const response = await fetch(`${SCHOOL_BACKEND_URL}/class/attendance/lookup`, {
-            method: "POST",
-            headers: authHeaders,
-            body: JSON.stringify({ studentID: studentId, date }),
-            cache: "no-store"
-          });
+            if (!response.ok) return [];
+            const payload = await response.json().catch(() => []);
+            return Array.isArray(payload) ? payload : [];
+          } catch {
+            return [];
+          }
+        });
 
-          if (!response.ok) return [];
-          const payload = await response.json().catch(() => []);
-          return Array.isArray(payload) ? payload : [];
-        } catch {
-          return [];
+        return (await Promise.all(requests)).flat();
+      };
+
+      // The canonical id is the normal production path. Only try legacy
+      // identifiers when no records exist for it, which keeps Render well
+      // within its request/time limits while preserving older data.
+      let records = primaryStudentId ? await fetchForId(primaryStudentId) : [];
+      if (records.length === 0) {
+        for (const alias of aliases) {
+          records = await fetchForId(alias);
+          if (records.length > 0) break;
         }
-      }));
-
-      const results = await Promise.all(requests);
-      results.flat().forEach((record: any) => applyRecord(record));
+      }
+      records.forEach((record: any) => applyRecord(record));
     };
 
     try {
@@ -377,7 +389,7 @@ export function StudentAttendanceCalendar({
           method: "POST",
           headers: authHeaders,
           body: JSON.stringify({
-            studentIDs: fetchTokens,
+            studentIDs: [primaryStudentId],
             studentID: primaryStudentId,
             student_id: primaryStudentId,
             year: selectedYear,
@@ -407,7 +419,7 @@ export function StudentAttendanceCalendar({
           method: "POST",
           headers: authHeaders,
           body: JSON.stringify({
-            studentIDs: fetchTokens,
+            studentIDs: [primaryStudentId],
             studentID: primaryStudentId,
             student_id: primaryStudentId,
             year: selectedYear,
