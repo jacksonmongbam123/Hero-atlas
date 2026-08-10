@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 
+const SCHOOL_BACKEND_URL = "https://abms-lkw9.onrender.com";
+
 interface IdentityGatewayProps {
   theme: "light" | "dark";
   onToggleTheme: () => void;
@@ -55,11 +57,14 @@ export default function IdentityGateway({ theme, onToggleTheme, onSuccess }: Ide
     setErrorMsg(null);
 
     try {
+      // The school API issues the JWT required by its attendance endpoints.
+      // Use it first in deployed builds; the local Hero-atlas login remains a
+      // fallback for the AI Studio preview and other local environments.
       const loginUrls = [
+        `${SCHOOL_BACKEND_URL}/login`,
+        `${SCHOOL_BACKEND_URL}/api/login`,
         "/api/login",
-        "/login",
-        "https://abms-lkw9.onrender.com/login",
-        "https://abms-lkw9.onrender.com/api/login"
+        "/login"
       ];
       let response: Response | null = null;
       let data: any = {};

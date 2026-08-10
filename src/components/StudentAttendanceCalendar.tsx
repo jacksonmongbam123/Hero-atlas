@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 const EMPTY_ARRAY: any[] = [];
+const SCHOOL_BACKEND_URL = "https://abms-lkw9.onrender.com";
 
 // Fallback fetch helper prioritizing remote API endpoints (e.g., https://abms-lkw9.onrender.com) then local origin
 const getStoredToken = (): string => {
@@ -324,8 +325,53 @@ export function StudentAttendanceCalendar({
       });
     };
 
+    // The school backend exposes attendance by student and day. The preview
+    // server also has a month aggregation route, but a static Render deploy
+    // cannot reach that server-side proxy. Querying the supported daily route
+    // keeps the calendar working in both environments.
+    const fetchSchoolBackendMonth = async () => {
+      const monthDays = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+      const dates = Array.from({ length: monthDays }, (_, index) => (
+        `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}-${String(index + 1).padStart(2, "0")}`
+      ));
+      const ids = Array.from(new Set([
+        primaryStudentId,
+        user?.studentID,
+        user?.student_id,
+        user?.studentId,
+        user?.reg_no,
+        user?.rollNo,
+        user?.id,
+        user?._id
+      ].filter(Boolean).map(value => String(value).trim())));
+
+      const requests = ids.flatMap(studentId => dates.map(async date => {
+        try {
+          const response = await fetch(`${SCHOOL_BACKEND_URL}/class/attendance/lookup`, {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({ studentID: studentId, date }),
+            cache: "no-store"
+          });
+
+          if (!response.ok) return [];
+          const payload = await response.json().catch(() => []);
+          return Array.isArray(payload) ? payload : [];
+        } catch {
+          return [];
+        }
+      }));
+
+      const results = await Promise.all(requests);
+      results.flat().forEach((record: any) => applyRecord(record));
+    };
+
     try {
-      // 1. Fetch from backend /attendance/student_month
+      // 1. Query the school backend directly. This is the reliable path for
+      // static deployments where Hero-atlas has no API proxy process.
+      await fetchSchoolBackendMonth();
+
+      // 2. Fetch from the Hero-atlas month aggregation route when available.
       try {
         const records = await fetchWithFallback("/attendance/student_month", {
           method: "POST",
@@ -355,7 +401,7 @@ export function StudentAttendanceCalendar({
         console.warn("Month attendance fetch warning:", err);
       }
 
-      // 2. Fetch lookup for student ID tokens
+      // 3. Fetch lookup for student ID tokens as an additional fallback.
       try {
         const records = await fetchWithFallback("/class/attendance/lookup", {
           method: "POST",
