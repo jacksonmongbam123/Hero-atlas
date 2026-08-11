@@ -1379,7 +1379,10 @@ async function startServer() {
     try {
       const mongo = await getMongoDb();
       if (mongo) {
-        const docs = await mongo.collection("attendances").find({}).sort({ date: -1 }).toArray();
+        // Sort by creation time so the newest appended records come first.
+        // A raw { date: -1 } sort breaks here because records mix BSON Date
+        // objects with plain YYYY-MM-DD strings, which MongoDB cannot compare.
+        const docs = await mongo.collection("attendances").find({}).sort({ createdAt: -1, _id: -1 }).toArray();
         const logMap = new Map();
         docs.forEach(d => {
           const classId = String(d.class_id || d.classId || "default");
