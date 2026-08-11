@@ -2717,8 +2717,35 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           }
         }
 
-        // 3. Look up attendance for each student for the selected date from MongoDB /class/attendance/lookup
-        let dateLevelMap = new Map<string, any>();
+        // 3. Look up attendance for each student for the selected date from MongoDB /class/attendance/lookup.
+        // The backend appends attendance updates, so the response may contain an older
+        // absent record followed by a newer present record for the same student/date.
+        // Always retain the newest record, just as the student calendar does.
+        const dateLevelMap = new Map<string, any>();
+        const getAttendanceRecordTime = (rec: any): number => {
+          for (const value of [rec?.updatedAt, rec?.createdAt, rec?.timestamp]) {
+            if (!value) continue;
+            const parsed = new Date(value).getTime();
+            if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+          }
+          const objectId = String(rec?._id?.$oid || rec?._id || rec?.id || "").trim();
+          return /^[\da-f]{24}$/i.test(objectId) ? Number.parseInt(objectId.slice(0, 8), 16) * 1000 : 0;
+        };
+        const recordStudentIds = (rec: any): string[] => [
+          rec?.studentID, rec?.student_id, rec?.studentId, rec?.reg_no,
+          rec?.rollNo, rec?.roll_no, rec?.user_id
+        ].filter(Boolean).map((value: any) => String(value).trim().toLowerCase());
+        const setNewestAttendanceRecord = (rec: any) => {
+          const recordIds = recordStudentIds(rec);
+          const recordTime = getAttendanceRecordTime(rec);
+          recordIds.forEach((sId: string) => {
+            const previous = dateLevelMap.get(sId);
+            if (!previous || recordTime >= getAttendanceRecordTime(previous)) {
+              dateLevelMap.set(sId, rec);
+            }
+          });
+        };
+
         try {
           const dateLookupRes = await fetchWithFallback("/class/attendance/lookup", {
             method: "POST",
@@ -2731,14 +2758,9 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
             })
           }).catch(() => null);
 
-          const list = Array.isArray(dateLookupRes) ? dateLookupRes : (dateLookupRes?.records || dateLookupRes?.matches || []);
+          const list = Array.isArray(dateLookupRes) ? dateLookupRes : (dateLookupRes?.records || dateLookupRes?.matches || dateLookupRes?.attendance || []);
           if (Array.isArray(list)) {
-            list.forEach((rec: any) => {
-              const sId = String(rec.studentID || rec.student_id || rec.studentId || rec.reg_no || "").trim().toLowerCase();
-              if (sId && !dateLevelMap.has(sId)) {
-                dateLevelMap.set(sId, rec);
-              }
-            });
+            list.forEach(setNewestAttendanceRecord);
           }
         } catch (_) {}
 
@@ -2780,19 +2802,35 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                     date: attendanceDate
                   })
                 });
-                foundRecord = getLatestRecordFromList(lookupResult);
+                const lookupList = Array.isArray(lookupResult)
+                  ? lookupResult
+                  : (lookupResult?.records || lookupResult?.matches || lookupResult?.attendance || []);
+                const matchingRecords = Array.isArray(lookupList)
+                  ? lookupList.filter((rec: any) => {
+                      const recordIds = recordStudentIds(rec);
+                      return candidateIds.some(id => recordIds.includes(String(id).toLowerCase()));
+                    })
+                  : [];
+                foundRecord = matchingRecords.length > 0
+                  ? matchingRecords.reduce((latest: any, rec: any) => (
+                      !latest || getAttendanceRecordTime(rec) >= getAttendanceRecordTime(latest) ? rec : latest
+                    ), null)
+                  : null;
               } catch (err) {
                 console.warn("Failed lookup for student", studentId, err);
               }
             }
 
             if (foundRecord) {
-              const stStr = String(foundRecord.status || "").toLowerCase();
-              if (stStr === "late") {
+              const stStr = String(foundRecord.status || foundRecord.presence || "").trim().toLowerCase();
+              const isLate = stStr === "late";
+              const isPresent = stStr === "present" || stStr === "p" || foundRecord.attended === true || foundRecord.attended === "true" || foundRecord.attended === 1 || foundRecord.attended === "1";
+              const isAbsent = stStr === "absent" || stStr === "a" || foundRecord.attended === false || foundRecord.attended === "false" || foundRecord.attended === 0 || foundRecord.attended === "0";
+              if (isLate) {
                 currentStatus = "late";
-              } else if (stStr === "present" || foundRecord.attended === true || foundRecord.attended === "true") {
+              } else if (isPresent) {
                 currentStatus = "present";
-              } else if (stStr === "absent" || foundRecord.attended === false || foundRecord.attended === "false") {
+              } else if (isAbsent) {
                 currentStatus = "absent";
               }
             }
