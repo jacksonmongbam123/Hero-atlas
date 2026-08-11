@@ -257,6 +257,8 @@ export function StudentAttendanceCalendar({
     }
 
     const fetchTokens = Array.from(new Set([primaryStudentId, ...studentTokens].filter(Boolean)));
+    const latestRecordByDate = new Map<string, { timestamp: number; sequence: number }>();
+    let recordSequence = 0;
 
     // Helper to format any date representation to YYYY-MM-DD
     const parseToYMD = (val: any): string => {
@@ -290,7 +292,28 @@ export function StudentAttendanceCalendar({
       return "";
     };
 
-    // Helper to apply status to date
+    const getRecordTimestamp = (rec: any): number => {
+      for (const value of [rec?.updatedAt, rec?.createdAt, rec?.timestamp]) {
+        if (!value) continue;
+        const parsed = new Date(value).getTime();
+        if (!Number.isNaN(parsed)) return parsed;
+      }
+
+      // The school backend's basic attendance rows do not include createdAt.
+      // MongoDB ObjectIds contain their creation timestamp in their first
+      // eight hexadecimal characters, so use that when no explicit timestamp
+      // is available.
+      const objectId = String(rec?._id || "");
+      if (/^[\da-f]{24}$/i.test(objectId)) {
+        return Number.parseInt(objectId.slice(0, 8), 16) * 1000;
+      }
+
+      return 0;
+    };
+
+    // Helper to apply status to date. The school backend appends attendance
+    // updates, so several records can exist for one student/date. Always use
+    // the newest record rather than trusting response order.
     const applyRecord = (rec: any) => {
       if (!rec) return;
       const recSId = String(
@@ -310,6 +333,18 @@ export function StudentAttendanceCalendar({
       const dateStr = parseToYMD(rawDate);
 
       if (dateStr && dateStr.length >= 10) {
+        const sequence = recordSequence++;
+        const timestamp = getRecordTimestamp(rec);
+        const previous = latestRecordByDate.get(dateStr);
+        if (
+          previous &&
+          (timestamp < previous.timestamp ||
+            (timestamp === previous.timestamp && sequence < previous.sequence))
+        ) {
+          return;
+        }
+        latestRecordByDate.set(dateStr, { timestamp, sequence });
+
         const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
         const isLate = statusLower === "late";
         const isAbsent = statusLower === "absent" || rec.attended === false || rec.attended === "false" || rec.attended === 0 || rec.attended === "0";
@@ -328,8 +363,8 @@ export function StudentAttendanceCalendar({
     const sortRecordsByTimestamp = (arr: any[]) => {
       if (!Array.isArray(arr)) return [];
       return [...arr].sort((a, b) => {
-        const timeA = new Date(a.updatedAt || a.createdAt || a.date || a.timestamp || 0).getTime();
-        const timeB = new Date(b.updatedAt || b.createdAt || b.date || b.timestamp || 0).getTime();
+        const timeA = getRecordTimestamp(a);
+        const timeB = getRecordTimestamp(b);
         return timeA - timeB;
       });
     };
@@ -382,64 +417,6 @@ export function StudentAttendanceCalendar({
       // 1. Query the school backend directly. This is the reliable path for
       // static deployments where Hero-atlas has no API proxy process.
       await fetchSchoolBackendMonth();
-
-      // 2. Fetch from the Hero-atlas month aggregation route when available.
-      try {
-        const records = await fetchWithFallback("/attendance/student_month", {
-          method: "POST",
-          headers: authHeaders,
-          body: JSON.stringify({
-            studentIDs: [primaryStudentId],
-            studentID: primaryStudentId,
-            student_id: primaryStudentId,
-            year: selectedYear,
-            month: selectedMonth,
-            monthNum: selectedMonth + 1,
-            token: cleanTok
-          })
-        }).catch(() => null);
-
-        let list: any[] = [];
-        if (Array.isArray(records)) {
-          list = records;
-        } else if (records && Array.isArray(records.records)) {
-          list = records.records;
-        } else if (records && Array.isArray(records.data)) {
-          list = records.data;
-        }
-
-        sortRecordsByTimestamp(list).forEach((r: any) => applyRecord(r));
-      } catch (err) {
-        console.warn("Month attendance fetch warning:", err);
-      }
-
-      // 3. Fetch lookup for student ID tokens as an additional fallback.
-      try {
-        const records = await fetchWithFallback("/class/attendance/lookup", {
-          method: "POST",
-          headers: authHeaders,
-          body: JSON.stringify({
-            studentIDs: [primaryStudentId],
-            studentID: primaryStudentId,
-            student_id: primaryStudentId,
-            year: selectedYear,
-            month: selectedMonth,
-            monthNum: selectedMonth + 1,
-            token: cleanTok
-          })
-        }).catch(() => null);
-
-        let list: any[] = [];
-        if (Array.isArray(records)) {
-          list = records;
-        } else if (records && Array.isArray(records.records)) {
-          list = records.records;
-        }
-
-        sortRecordsByTimestamp(list).forEach((r: any) => applyRecord(r));
-      } catch (err) {
-        console.warn("Local lookup fetch warning:", err);
-      }
 
       setAttendanceMap(prev => {
         const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
