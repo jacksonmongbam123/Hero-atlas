@@ -164,6 +164,39 @@ const fetchWithFallback = async (path: string, options?: RequestInit): Promise<a
 
 const EMPTY_ARRAY: any[] = [];
 
+function getLatestRecordFromList(res: any): any {
+  if (!res) return null;
+  const list = Array.isArray(res) ? res : (res.records || res.data || res.matches || res.attendance || []);
+  if (!Array.isArray(list) || list.length === 0) return null;
+
+  let latestRec = list[0];
+  let latestTime = 0;
+
+  const getRecordTime = (r: any): number => {
+    if (!r) return 0;
+    for (const val of [r.updatedAt, r.createdAt, r.timestamp]) {
+      if (val) {
+        const t = new Date(val).getTime();
+        if (!isNaN(t) && t > 0) return t;
+      }
+    }
+    const oid = String(r._id?.$oid || r._id || r.id || "").trim();
+    if (/^[\da-f]{24}$/i.test(oid)) {
+      return parseInt(oid.slice(0, 8), 16) * 1000;
+    }
+    return 0;
+  };
+
+  for (const item of list) {
+    const time = getRecordTime(item);
+    if (time > latestTime) {
+      latestTime = time;
+      latestRec = item;
+    }
+  }
+  return latestRec;
+}
+
 function UnusedStudentAttendanceCalendar({
   user,
   parentUser,
@@ -306,9 +339,8 @@ function UnusedStudentAttendanceCalendar({
               })
             }).catch(() => null);
 
-            if (Array.isArray(lookupRes) && lookupRes.length > 0) {
-              foundRecord = lookupRes[lookupRes.length - 1];
-            } else {
+            foundRecord = getLatestRecordFromList(lookupRes);
+            if (!foundRecord) {
               // 2. Direct local backend lookup
               try {
                 const localRes = await fetch("/api/class/attendance/lookup", {
@@ -318,9 +350,7 @@ function UnusedStudentAttendanceCalendar({
                 });
                 if (localRes.ok) {
                   const localArr = await localRes.json();
-                  if (Array.isArray(localArr) && localArr.length > 0) {
-                    foundRecord = localArr[localArr.length - 1];
-                  }
+                  foundRecord = getLatestRecordFromList(localArr);
                 }
               } catch (_) {}
             }
@@ -1036,15 +1066,17 @@ function DailyAttendanceInspector({
   token,
   user,
   studentsAttendance,
+  attendanceDate,
 }: {
   selectedClassId: string;
   teacherClasses: any[];
   token?: string;
   user: any;
   studentsAttendance: Record<string, any[]>;
+  attendanceDate?: string;
 }) {
   const [inspectorDate, setInspectorDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
+    attendanceDate || new Date().toISOString().split("T")[0]
   );
   const [inspectorRoster, setInspectorRoster] = useState<{
     loading: boolean;
@@ -1077,6 +1109,30 @@ function DailyAttendanceInspector({
     }
 
     try {
+      let inspectorMap = new Map<string, any>();
+      try {
+        const dateLookup = await fetchWithFallback("/class/attendance/lookup", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: token ? `Bearer ${token}` : "",
+          },
+          body: JSON.stringify({
+            date: inspectorDate,
+          }),
+        }).catch(() => null);
+
+        const list = Array.isArray(dateLookup) ? dateLookup : (dateLookup?.records || dateLookup?.matches || []);
+        if (Array.isArray(list)) {
+          list.forEach((rec: any) => {
+            const sId = String(rec.studentID || rec.student_id || rec.studentId || rec.reg_no || "").trim().toLowerCase();
+            if (sId && !inspectorMap.has(sId)) {
+              inspectorMap.set(sId, rec);
+            }
+          });
+        }
+      } catch (_) {}
+
       const mapped = await Promise.all(
         classRoster.map(async (st) => {
           const sId = st.id;
@@ -1084,27 +1140,43 @@ function DailyAttendanceInspector({
           const sRoll = st.rollNo;
           let status: "present" | "absent" | "late" | "no_records" = "no_records";
 
-          try {
-            const lookupRes = await fetchWithFallback("/class/attendance/lookup", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: token ? `Bearer ${token}` : "",
-              },
-              body: JSON.stringify({
-                studentID: sId,
-                date: inspectorDate,
-              }),
-            }).catch(() => null);
+          const candidateTokens = Array.from(new Set([sId, sRoll].map(v => String(v || "").trim()).filter(Boolean)));
+          let foundRec: any = null;
 
-            if (Array.isArray(lookupRes) && lookupRes.length > 0) {
-              const latest = lookupRes[lookupRes.length - 1];
-              status = latest.attended ? "present" : "absent";
-            } else if (inspectorDate === new Date().toISOString().split("T")[0] && st.status) {
-              status = st.status;
+          for (const tok of candidateTokens) {
+            const match = inspectorMap.get(tok.toLowerCase());
+            if (match) {
+              foundRec = match;
+              break;
             }
-          } catch (_) {
-            if (st.status) status = st.status;
+          }
+
+          if (!foundRec) {
+            try {
+              const lookupRes = await fetchWithFallback("/class/attendance/lookup", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: token ? `Bearer ${token}` : "",
+                },
+                body: JSON.stringify({
+                  studentIDs: candidateTokens,
+                  studentID: sId,
+                  date: inspectorDate,
+                }),
+              }).catch(() => null);
+
+              foundRec = getLatestRecordFromList(lookupRes);
+            } catch (_) {}
+          }
+
+          if (foundRec) {
+            const recSt = String(foundRec.status || "").toLowerCase();
+            if (recSt === "late") status = "late";
+            else if (recSt === "present" || foundRec.attended === true || foundRec.attended === "true") status = "present";
+            else if (recSt === "absent" || foundRec.attended === false || foundRec.attended === "false") status = "absent";
+          } else if (st.status && (inspectorDate === attendanceDate || inspectorDate === new Date().toISOString().split("T")[0])) {
+            status = st.status;
           }
 
           return {
@@ -1131,10 +1203,17 @@ function DailyAttendanceInspector({
       console.error("Inspector error:", e);
       setInspectorRoster((prev) => ({ ...prev, loading: false }));
     }
-  }, [selectedClassId, inspectorDate, studentsAttendance, token]);
+  }, [selectedClassId, inspectorDate, studentsAttendance, token, attendanceDate]);
 
   useEffect(() => {
     loadInspectorData();
+    const handleUpdated = () => {
+      loadInspectorData();
+    };
+    window.addEventListener("attendance_updated", handleUpdated);
+    return () => {
+      window.removeEventListener("attendance_updated", handleUpdated);
+    };
   }, [loadInspectorData]);
 
   const activeClassName =
@@ -2639,31 +2718,83 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
         }
 
         // 3. Look up attendance for each student for the selected date from MongoDB /class/attendance/lookup
+        let dateLevelMap = new Map<string, any>();
+        try {
+          const dateLookupRes = await fetchWithFallback("/class/attendance/lookup", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : ""
+            },
+            body: JSON.stringify({
+              date: attendanceDate
+            })
+          }).catch(() => null);
+
+          const list = Array.isArray(dateLookupRes) ? dateLookupRes : (dateLookupRes?.records || dateLookupRes?.matches || []);
+          if (Array.isArray(list)) {
+            list.forEach((rec: any) => {
+              const sId = String(rec.studentID || rec.student_id || rec.studentId || rec.reg_no || "").trim().toLowerCase();
+              if (sId && !dateLevelMap.has(sId)) {
+                dateLevelMap.set(sId, rec);
+              }
+            });
+          }
+        } catch (_) {}
+
         const mappedRoster = await Promise.all(
           uniqueRaw.map(async (student) => {
-            const studentId = student._id || student.id;
+            const candidateIds = Array.from(
+              new Set(
+                [student._id, student.id, student.reg_no, student.rollNo, student.studentID, student.student_id, student.nic]
+                  .map(v => String(v || "").trim())
+                  .filter(Boolean)
+              )
+            );
+            const studentId = candidateIds[0] || student._id || student.id || student.reg_no || "STU";
             const fullName = [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ") || student.name || "Student";
             const rollNo = student.reg_no || student.nic || student.phone || "N/A";
 
             let currentStatus: "present" | "absent" | "late" | null = null;
-            try {
-              const lookupResult = await fetchWithFallback("/class/attendance/lookup", {
-                method: "POST",
-                headers: { 
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                  studentID: studentId,
-                  date: attendanceDate
-                })
-              });
-              if (Array.isArray(lookupResult) && lookupResult.length > 0) {
-                const latest = lookupResult[lookupResult.length - 1];
-                currentStatus = latest.attended ? "present" : "absent";
+            let foundRecord: any = null;
+
+            for (const cand of candidateIds) {
+              const match = dateLevelMap.get(cand.toLowerCase());
+              if (match) {
+                foundRecord = match;
+                break;
               }
-            } catch (err) {
-              console.warn("Failed lookup for student", studentId, err);
+            }
+
+            if (!foundRecord) {
+              try {
+                const lookupResult = await fetchWithFallback("/class/attendance/lookup", {
+                  method: "POST",
+                  headers: { 
+                    "Content-Type": "application/json",
+                    "Authorization": token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : ""
+                  },
+                  body: JSON.stringify({
+                    studentIDs: candidateIds,
+                    studentID: studentId,
+                    date: attendanceDate
+                  })
+                });
+                foundRecord = getLatestRecordFromList(lookupResult);
+              } catch (err) {
+                console.warn("Failed lookup for student", studentId, err);
+              }
+            }
+
+            if (foundRecord) {
+              const stStr = String(foundRecord.status || "").toLowerCase();
+              if (stStr === "late") {
+                currentStatus = "late";
+              } else if (stStr === "present" || foundRecord.attended === true || foundRecord.attended === "true") {
+                currentStatus = "present";
+              } else if (stStr === "absent" || foundRecord.attended === false || foundRecord.attended === "false") {
+                currentStatus = "absent";
+              }
             }
 
             return {
@@ -6010,6 +6141,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                   token={user?.token}
                   user={user}
                   studentsAttendance={studentsAttendance}
+                  attendanceDate={attendanceDate}
                 />
 
                 {/* Historical Logs List */}
