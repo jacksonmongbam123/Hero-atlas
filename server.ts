@@ -1918,27 +1918,45 @@ async function startServer() {
           filter = { $or: buildDateFilterConditions(cleanDateFilter) };
         }
 
-        let docs = await mongo.collection("attendances").find(filter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
+        let docs = await mongo.collection("attendances").find(filter).sort({ updatedAt: -1, createdAt: -1, _id: -1 }).toArray();
         if (docs && docs.length > 0) {
-          matches = docs.map(d => ({
-            ...d,
-            studentID: String(d.studentID || d.student_id || d.studentId || ""),
-            date: formatToYMD(d.date || d.attendanceDate || d.attendance_date),
-            attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
-            status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
-          }));
+          const seenDates = new Set<string>();
+          docs.forEach(d => {
+            const dateStr = formatToYMD(d.date || d.attendanceDate || d.attendance_date);
+            const sId = String(d.studentID || d.student_id || d.studentId || "");
+            const key = (targetIds.length > 0 && dateStr) ? dateStr : `${sId.toLowerCase()}_${dateStr}`;
+            if (!seenDates.has(key)) {
+              seenDates.add(key);
+              matches.push({
+                ...d,
+                studentID: sId,
+                date: dateStr,
+                attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
+                status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
+              });
+            }
+          });
         } else if (targetIds.length === 0 && cleanDateFilter) {
           // Fallback query only if no specific student target was requested
           const fallbackFilter = { $or: buildDateFilterConditions(cleanDateFilter) };
-          let fallbackDocs = await mongo.collection("attendances").find(fallbackFilter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
+          let fallbackDocs = await mongo.collection("attendances").find(fallbackFilter).sort({ updatedAt: -1, createdAt: -1, _id: -1 }).toArray();
           if (fallbackDocs && fallbackDocs.length > 0) {
-            matches = fallbackDocs.map(d => ({
-              ...d,
-              studentID: String(d.studentID || d.student_id || d.studentId || ""),
-              date: formatToYMD(d.date || d.attendanceDate || d.attendance_date),
-              attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
-              status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
-            }));
+            const seenDates = new Set<string>();
+            fallbackDocs.forEach(d => {
+              const dateStr = formatToYMD(d.date || d.attendanceDate || d.attendance_date);
+              const sId = String(d.studentID || d.student_id || d.studentId || "");
+              const key = `${sId.toLowerCase()}_${dateStr}`;
+              if (!seenDates.has(key)) {
+                seenDates.add(key);
+                matches.push({
+                  ...d,
+                  studentID: sId,
+                  date: dateStr,
+                  attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
+                  status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
+                });
+              }
+            });
           }
         }
       }
@@ -2092,7 +2110,7 @@ async function startServer() {
           filter = { $or: buildDateFilterConditions(prefixes) };
         }
 
-        let docs = await mongo.collection("attendances").find(filter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
+        let docs = await mongo.collection("attendances").find(filter).sort({ updatedAt: -1, createdAt: -1, _id: -1 }).toArray();
         if ((!docs || docs.length === 0) && targetIds.length > 0) {
           const rawRegexes = targetIds.map(t => new RegExp(`^${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
           const rawObjIds = targetIds.filter(t => mongoose.Types.ObjectId.isValid(t)).map(t => new mongoose.Types.ObjectId(t));
@@ -2121,26 +2139,30 @@ async function startServer() {
             ]
           } : { $or: rawIdConds };
 
-          docs = await mongo.collection("attendances").find(rawFilter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
+          docs = await mongo.collection("attendances").find(rawFilter).sort({ updatedAt: -1, createdAt: -1, _id: -1 }).toArray();
         } else if ((!docs || docs.length === 0) && targetIds.length === 0 && prefixes.length > 0) {
           const fallbackFilter = { $or: buildDateFilterConditions(prefixes) };
-          docs = await mongo.collection("attendances").find(fallbackFilter).sort({ updatedAt: 1, createdAt: 1, _id: 1 }).toArray();
+          docs = await mongo.collection("attendances").find(fallbackFilter).sort({ updatedAt: -1, createdAt: -1, _id: -1 }).toArray();
         }
 
         if (docs && docs.length > 0) {
           docs.forEach(d => {
             const sId = String(d.studentID || d.student_id || d.studentId || d.reg_no || d.id || d._id || "");
             const dateStr = formatToYMD(d.date || d.attendanceDate || d.attendance_date);
-            const key = `${sId.toLowerCase()}_${dateStr}`;
-            matchesMap.set(key, {
-              ...d,
-              studentID: sId,
-              student_id: sId,
-              date: dateStr,
-              attendanceDate: dateStr,
-              attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
-              status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
-            });
+            if (!dateStr) return;
+
+            const key = (targetIds.length > 0) ? dateStr : `${sId.toLowerCase()}_${dateStr}`;
+            if (!matchesMap.has(key)) {
+              matchesMap.set(key, {
+                ...d,
+                studentID: sId,
+                student_id: sId,
+                date: dateStr,
+                attendanceDate: dateStr,
+                attended: d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late",
+                status: (d.attended === true || d.attended === "true" || String(d.status).toLowerCase() === "present" || String(d.status).toLowerCase() === "late") ? (String(d.status).toLowerCase() === "late" ? "late" : "present") : "absent"
+              });
+            }
           });
         }
       }

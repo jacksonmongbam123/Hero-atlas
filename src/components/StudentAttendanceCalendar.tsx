@@ -257,7 +257,7 @@ export function StudentAttendanceCalendar({
     }
 
     const fetchTokens = Array.from(new Set([primaryStudentId, ...studentTokens].filter(Boolean)));
-    const latestRecordByDate = new Map<string, { timestamp: number; sequence: number }>();
+    const latestRecordByDate = new Map<string, { timestamp: number; sequence: number; objectId?: string }>();
     let recordSequence = 0;
 
     // Helper to format any date representation to YYYY-MM-DD
@@ -292,23 +292,23 @@ export function StudentAttendanceCalendar({
       return "";
     };
 
-    const getRecordTimestamp = (rec: any): number => {
+    const getRecordInfo = (rec: any) => {
+      let timestamp = 0;
       for (const value of [rec?.updatedAt, rec?.createdAt, rec?.timestamp]) {
         if (!value) continue;
         const parsed = new Date(value).getTime();
-        if (!Number.isNaN(parsed)) return parsed;
+        if (!Number.isNaN(parsed) && parsed > 0) {
+          timestamp = parsed;
+          break;
+        }
       }
 
-      // The school backend's basic attendance rows do not include createdAt.
-      // MongoDB ObjectIds contain their creation timestamp in their first
-      // eight hexadecimal characters, so use that when no explicit timestamp
-      // is available.
-      const objectId = String(rec?._id || "");
-      if (/^[\da-f]{24}$/i.test(objectId)) {
-        return Number.parseInt(objectId.slice(0, 8), 16) * 1000;
+      const objectId = String(rec?._id?.$oid || rec?._id || rec?.id || "").trim();
+      if (!timestamp && /^[\da-f]{24}$/i.test(objectId)) {
+        timestamp = Number.parseInt(objectId.slice(0, 8), 16) * 1000;
       }
 
-      return 0;
+      return { timestamp, objectId };
     };
 
     // Helper to apply status to date. The school backend appends attendance
@@ -320,9 +320,10 @@ export function StudentAttendanceCalendar({
         rec.studentID || rec.student_id || rec.studentId || rec.student || rec.reg_no || rec.user_id || rec.id || rec._id || ""
       ).trim().toLowerCase();
       
-      const matchesToken = fetchTokens.length === 0 || !recSId ? false : fetchTokens.some(t => {
-        const lowerT = t.toLowerCase();
-        return lowerT === recSId || recSId === lowerT || recSId.includes(lowerT) || lowerT.includes(recSId);
+      const matchesToken = fetchTokens.length === 0 ? true : fetchTokens.some(t => {
+        const lowerT = String(t).trim().toLowerCase();
+        if (!lowerT || lowerT === "undefined" || lowerT === "null") return false;
+        return lowerT === recSId || recSId === lowerT || (recSId.length >= 4 && lowerT.includes(recSId)) || (lowerT.length >= 4 && recSId.includes(lowerT));
       });
 
       // Do not let an unfiltered fallback response overwrite this student's
@@ -334,16 +335,17 @@ export function StudentAttendanceCalendar({
 
       if (dateStr && dateStr.length >= 10) {
         const sequence = recordSequence++;
-        const timestamp = getRecordTimestamp(rec);
+        const { timestamp, objectId } = getRecordInfo(rec);
         const previous = latestRecordByDate.get(dateStr);
-        if (
-          previous &&
-          (timestamp < previous.timestamp ||
-            (timestamp === previous.timestamp && sequence < previous.sequence))
-        ) {
-          return;
+
+        if (previous) {
+          if (timestamp < previous.timestamp) return;
+          if (timestamp === previous.timestamp) {
+            if (objectId && previous.objectId && objectId < previous.objectId) return;
+            if ((!objectId || !previous.objectId || objectId === previous.objectId) && sequence < previous.sequence) return;
+          }
         }
-        latestRecordByDate.set(dateStr, { timestamp, sequence });
+        latestRecordByDate.set(dateStr, { timestamp, sequence, objectId });
 
         const statusLower = String(rec.status || rec.presence || "").trim().toLowerCase();
         const isLate = statusLower === "late";
@@ -360,25 +362,12 @@ export function StudentAttendanceCalendar({
       }
     };
 
-    const sortRecordsByTimestamp = (arr: any[]) => {
-      if (!Array.isArray(arr)) return [];
-      return [...arr].sort((a, b) => {
-        const timeA = getRecordTimestamp(a);
-        const timeB = getRecordTimestamp(b);
-        return timeA - timeB;
-      });
-    };
-
-    // The school backend exposes attendance by student and day. The preview
-    // server also has a month aggregation route, but a static Render deploy
-    // cannot reach that server-side proxy. Querying the supported daily route
-    // keeps the calendar working in both environments.
     const fetchSchoolBackendMonth = async () => {
       const monthDays = new Date(selectedYear, selectedMonth + 1, 0).getDate();
       const dates = Array.from({ length: monthDays }, (_, index) => (
         `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}-${String(index + 1).padStart(2, "0")}`
       ));
-      const aliases = fetchTokens.filter(id => id !== primaryStudentId);
+
       const fetchForId = async (studentId: string) => {
         const requests = dates.map(async date => {
           try {
@@ -400,22 +389,30 @@ export function StudentAttendanceCalendar({
         return (await Promise.all(requests)).flat();
       };
 
-      // The canonical id is the normal production path. Only try legacy
-      // identifiers when no records exist for it, which keeps Render well
-      // within its request/time limits while preserving older data.
-      let records = primaryStudentId ? await fetchForId(primaryStudentId) : [];
-      if (records.length === 0) {
-        for (const alias of aliases) {
-          records = await fetchForId(alias);
-          if (records.length > 0) break;
-        }
-      }
-      records.forEach((record: any) => applyRecord(record));
+      const allRecords = (await Promise.all(fetchTokens.map(id => fetchForId(id)))).flat();
+      allRecords.forEach((record: any) => applyRecord(record));
     };
 
     try {
-      // 1. Query the school backend directly. This is the reliable path for
-      // static deployments where Hero-atlas has no API proxy process.
+      // 1. Query Hero-atlas local/proxy Mongo endpoint (reads MongoDB Atlas directly with expanded student token aliases)
+      try {
+        const monthRes = await fetchWithFallback("/api/attendance/student_month", {
+          method: "POST",
+          headers: authHeaders,
+          body: JSON.stringify({
+            studentIDs: fetchTokens,
+            year: selectedYear,
+            month: selectedMonth + 1
+          })
+        });
+        if (Array.isArray(monthRes) && monthRes.length > 0) {
+          monthRes.forEach((r: any) => applyRecord(r));
+        }
+      } catch (e) {
+        console.warn("[StudentMonth API] notice:", e);
+      }
+
+      // 2. Query school backend / Render lookup route for ALL fetchTokens across the month
       await fetchSchoolBackendMonth();
 
       setAttendanceMap(prev => {
