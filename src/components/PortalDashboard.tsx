@@ -2565,15 +2565,16 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
     let capListenerHandler: any = null;
     try {
-      const capApp = (window as any).Capacitor?.Plugins?.App || (window as any).CapacitorApp;
-      if (capApp) {
-        capApp.addListener("backButton", () => {
+      import("@capacitor/app").then(({ App: CapApp }) => {
+        CapApp.addListener("backButton", () => {
           const handled = handleHardwareBack();
           if (!handled) {
-            capApp.exitApp?.();
+            CapApp.exitApp();
           }
-        });
-      }
+        }).then((handler) => {
+          capListenerHandler = handler;
+        }).catch(() => {});
+      }).catch(() => {});
     } catch (e) {}
 
     return () => {
@@ -2843,76 +2844,37 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
     const loadRosterAndStatuses = async () => {
       try {
-        let rawStudents: any[] = [];
-
-        // 0. Primary direct fetch for students assigned to selected class section
+        // 1. Try to fetch students of the selected class via relational mapping
+        let studentIds: string[] = [];
         try {
-          const directStudents = await fetchWithFallback("/api/attendance/students", {
+          const relations = await fetchWithFallback("/rel/studentClass/find", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : ""
-            },
-            body: JSON.stringify({
-              class_id: selectedTeacherClassId,
-              classId: selectedTeacherClassId,
-              organization_id: organizationId
-            })
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: "class_id", value: selectedTeacherClassId })
           });
-          if (Array.isArray(directStudents) && directStudents.length > 0) {
-            rawStudents = directStudents;
+          if (Array.isArray(relations)) {
+            studentIds = Array.from(new Set(relations.map(r => String(r.student_id || "").trim()).filter(Boolean)));
           }
         } catch (err) {
-          console.warn("Direct attendance/students fetch warning:", err);
+          console.warn("Could not load student class mappings", err);
         }
 
-        if (rawStudents.length === 0) {
+        let rawStudents: any[] = [];
+        if (studentIds.length > 0) {
           try {
-            const classStudents = await fetchWithFallback("/m/student/find", {
+            const studentsResponse = await fetchWithFallback("/m/student/retrieveList", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: "class_id", value: selectedTeacherClassId })
+              headers: { 
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+              },
+              body: JSON.stringify({ list: studentIds })
             });
-            if (Array.isArray(classStudents) && classStudents.length > 0) {
-              rawStudents = classStudents;
+            if (Array.isArray(studentsResponse)) {
+              rawStudents = studentsResponse;
             }
           } catch (err) {
-            console.warn("Failed /m/student/find for class_id:", err);
-          }
-        }
-
-        // 1. Try relational mapping if still empty
-        if (rawStudents.length === 0) {
-          let studentIds: string[] = [];
-          try {
-            const relations = await fetchWithFallback("/rel/studentClass/find", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: "class_id", value: selectedTeacherClassId })
-            });
-            if (Array.isArray(relations)) {
-              studentIds = Array.from(new Set(relations.map(r => String(r.student_id || "").trim()).filter(Boolean)));
-            }
-          } catch (err) {
-            console.warn("Could not load student class mappings", err);
-          }
-
-          if (studentIds.length > 0) {
-            try {
-              const studentsResponse = await fetchWithFallback("/m/student/retrieveList", {
-                method: "POST",
-                headers: { 
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${token}`
-                },
-                body: JSON.stringify({ list: studentIds })
-              });
-              if (Array.isArray(studentsResponse)) {
-                rawStudents = studentsResponse;
-              }
-            } catch (err) {
-              console.warn("Failed to retrieve student details from retrieveList", err);
-            }
+            console.warn("Failed to retrieve student details from retrieveList", err);
           }
         }
 
@@ -6056,29 +6018,14 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4 pt-4">
                       <div className="md:col-span-5 space-y-1.5">
                         <label className="text-[10px] text-slate-500 font-black uppercase tracking-wider block">Assigned Classroom / Division</label>
-                        {teacherClasses.length > 0 ? (
-                          <div className="relative">
-                            <select
-                              value={selectedTeacherClassId}
-                              onChange={(e) => setSelectedTeacherClassId(e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3.5 py-2.5 text-xs font-bold text-indigo-400 focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer appearance-none pr-8"
-                            >
-                              {teacherClasses.map(c => (
-                                <option key={`tcls-${c.id}`} value={c.id} className="bg-slate-950 text-slate-200">
-                                  {c.name} ({c.code})
-                                </option>
-                              ))}
-                            </select>
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
-                              ▼
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="w-full bg-slate-950/60 border border-slate-900 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-500 flex items-center gap-2">
-                            <BookOpen className="w-4 h-4 text-slate-600 shrink-0" />
-                            <span className="truncate">Loading Assigned Classroom...</span>
-                          </div>
-                        )}
+                        <div className="w-full bg-slate-950/60 border border-slate-900 rounded-xl px-3.5 py-2.5 text-xs font-bold text-indigo-400 flex items-center gap-2">
+                          <BookOpen className="w-4 h-4 text-indigo-500 shrink-0" />
+                          <span className="truncate">
+                            {teacherClasses.length > 0 
+                              ? `${(teacherClasses.find(c => c.id === selectedTeacherClassId) || teacherClasses[0]).name} (${(teacherClasses.find(c => c.id === selectedTeacherClassId) || teacherClasses[0]).code})`
+                              : "Loading Assigned Classroom..."}
+                          </span>
+                        </div>
                       </div>
 
                     <div className="md:col-span-4 space-y-1.5">
