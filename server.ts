@@ -1384,9 +1384,23 @@ async function startServer() {
         // objects with plain YYYY-MM-DD strings, which MongoDB cannot compare.
         const docs = await mongo.collection("attendances").find({}).sort({ createdAt: -1, _id: -1 }).toArray();
         const logMap = new Map();
+        const latestStudentRecords = new Set<string>();
         docs.forEach(d => {
           const classId = String(d.class_id || d.classId || "default");
           const dateStr = formatToYMD(d.date || d.attendanceDate || d.attendance_date);
+          const studentId = String(
+            d.studentID || d.student_id || d.studentId || d.student || d.reg_no || d.rollNo || d._id || ""
+          ).trim().toLowerCase();
+          const studentDateKey = `${classId}_${studentId}_${dateStr}`;
+
+          // Attendance edits are stored as replacement-style records in some
+          // flows and append-style records in the deployed School API. The
+          // query is newest-first, so only count the first record for each
+          // student/date instead of counting stale edits as additional
+          // attendance.
+          if (latestStudentRecords.has(studentDateKey)) return;
+          latestStudentRecords.add(studentDateKey);
+
           const key = `${classId}_${dateStr}`;
           if (!logMap.has(key)) {
             logMap.set(key, {

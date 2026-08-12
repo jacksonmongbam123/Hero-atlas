@@ -164,40 +164,105 @@ const fetchWithFallback = async (path: string, options?: RequestInit): Promise<a
 
 const EMPTY_ARRAY: any[] = [];
 
+function getAttendanceRecordTime(record: any): number {
+  if (!record) return 0;
+
+  for (const value of [record.updatedAt, record.createdAt, record.timestamp]) {
+    if (!value) continue;
+    const parsed = new Date(value).getTime();
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  }
+
+  // The School backend's attendance schema does not expose createdAt. MongoDB
+  // ObjectIds still carry their creation time in the first four bytes.
+  const objectId = String(record._id?.$oid || record._id || record.id || "").trim();
+  if (/^[\da-f]{24}$/i.test(objectId)) {
+    return Number.parseInt(objectId.slice(0, 8), 16) * 1000;
+  }
+
+  return 0;
+}
+
+function getAttendanceRecordObjectId(record: any): string {
+  const value = String(record?._id?.$oid || record?._id || "").trim();
+  return /^[\da-f]{24}$/i.test(value) ? value.toLowerCase() : "";
+}
+
+function getAttendanceRecordStudentIds(record: any): string[] {
+  return [
+    record?.studentID,
+    record?.student_id,
+    record?.studentId,
+    record?.student,
+    record?.reg_no,
+    record?.rollNo,
+    record?.roll_no,
+    record?.user_id,
+    record?.userId,
+    record?.id
+  ]
+    .filter(value => value !== undefined && value !== null && String(value).trim() !== "")
+    .map(value => String(value).trim().toLowerCase());
+}
+
+function getAttendanceStatus(record: any): "present" | "absent" | "late" | null {
+  const status = String(record?.status || record?.presence || record?.attendanceStatus || "")
+    .trim()
+    .toLowerCase();
+
+  if (status === "late" || status === "l") return "late";
+  if (status === "absent" || status === "a") return "absent";
+  if (status === "present" || status === "p") return "present";
+
+  if (record?.attended === true || record?.attended === "true" || record?.attended === 1 || record?.attended === "1") {
+    return "present";
+  }
+  if (record?.attended === false || record?.attended === "false" || record?.attended === 0 || record?.attended === "0") {
+    return "absent";
+  }
+
+  return null;
+}
+
+function isNewerAttendanceRecord(
+  candidate: any,
+  candidateSequence: number,
+  current: any,
+  currentSequence: number
+): boolean {
+  if (!current) return true;
+
+  const candidateTime = getAttendanceRecordTime(candidate);
+  const currentTime = getAttendanceRecordTime(current);
+  if (candidateTime !== currentTime) return candidateTime > currentTime;
+
+  // If the backend returns two records with the same timestamp, prefer the
+  // newer MongoDB ObjectId. If neither record has one, preserve response
+  // order because the school API appends newer records after older records.
+  const candidateObjectId = getAttendanceRecordObjectId(candidate);
+  const currentObjectId = getAttendanceRecordObjectId(current);
+  if (candidateObjectId && currentObjectId && candidateObjectId !== currentObjectId) {
+    return candidateObjectId > currentObjectId;
+  }
+
+  return candidateSequence > currentSequence;
+}
+
 function getLatestRecordFromList(res: any): any {
   if (!res) return null;
   const list = Array.isArray(res) ? res : (res.records || res.data || res.matches || res.attendance || []);
   if (!Array.isArray(list) || list.length === 0) return null;
 
   let latestRec = list[0];
-  let latestTime = 0;
-
-  const getRecordTime = (r: any): number => {
-    if (!r) return 0;
-    for (const val of [r.updatedAt, r.createdAt, r.timestamp]) {
-      if (val) {
-        const t = new Date(val).getTime();
-        if (!isNaN(t) && t > 0) return t;
-      }
-    }
-    const oid = String(r._id?.$oid || r._id || r.id || "").trim();
-    if (/^[\da-f]{24}$/i.test(oid)) {
-      return parseInt(oid.slice(0, 8), 16) * 1000;
-    }
-    return 0;
-  };
-
-  // The school backend appends attendance updates, so newer records appear later
-  // in the array. When timestamps are equal (or both 0, which happens when the
-  // backend stores no createdAt/updatedAt), the later record is the newest and
-  // should win — the student calendar relies on exactly this behavior.
-  for (const item of list) {
-    const time = getRecordTime(item);
-    if (time > latestTime || time === latestTime) {
-      latestTime = time;
-      latestRec = item;
+  let latestSequence = 0;
+  for (let index = 1; index < list.length; index += 1) {
+    const candidate = list[index];
+    if (isNewerAttendanceRecord(candidate, index, latestRec, latestSequence)) {
+      latestRec = candidate;
+      latestSequence = index;
     }
   }
+
   return latestRec;
 }
 
@@ -2662,7 +2727,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
         const localRes = await fetch(`/api/attendance/logs?teacherId=${encodeURIComponent(teacherId)}&organizationId=${encodeURIComponent(organizationId)}`);
         if (localRes.ok) {
           const logs = await localRes.json();
-          if (Array.isArray(logs)) {
+          if (Array.isArray(logs) && logs.length > 0) {
             setAttendanceLogs(logs);
             return;
           }
@@ -2680,14 +2745,16 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           const authHeader = token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : "";
           const lookupForDate = async (dateStr: string) => {
             try {
-              const res = await fetch("https://abms-lkw9.onrender.com/class/attendance/lookup", {
+              const res = await fetchWithFallback("/class/attendance/lookup", {
                 method: "POST",
-                headers: { "Content-Type": "application/json", "x-access-token": token, Authorization: authHeader },
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-access-token": token,
+                  Authorization: authHeader
+                },
                 body: JSON.stringify({ date: dateStr })
               });
-              if (!res.ok) return [];
-              const payload = await res.json();
-              return Array.isArray(payload) ? payload : [];
+              return Array.isArray(res) ? res : [];
             } catch {
               return [];
             }
@@ -2695,7 +2762,22 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           const allRecords = (await Promise.all(recentDates.map(lookupForDate))).flat();
           const classNames = new Map<string, string>();
           teacherClasses.forEach(c => classNames.set(String(c.id || "").trim().toLowerCase(), c.name || "Class"));
-          allRecords.forEach(rec => {
+
+          const latestByStudentDate = new Map<string, { record: any; sequence: number }>();
+          allRecords.forEach((rec, sequence) => {
+            const rawDate = rec.date || rec.attendanceDate || rec.attendance_date || "";
+            const dateStr = String(rawDate).split("T")[0].slice(0, 10);
+            if (!dateStr) return;
+            const studentId = getAttendanceRecordStudentIds(rec)[0] || String(rec._id || rec.id || "unknown");
+            const classId = String(rec.class_id || rec.classId || teacherClasses[0]?.id || "default").trim().toLowerCase();
+            const key = `${classId}_${studentId}_${dateStr}`;
+            const previous = latestByStudentDate.get(key);
+            if (!previous || isNewerAttendanceRecord(rec, sequence, previous.record, previous.sequence)) {
+              latestByStudentDate.set(key, { record: rec, sequence });
+            }
+          });
+
+          latestByStudentDate.forEach(({ record: rec }) => {
             const classId = String(rec.class_id || rec.classId || teacherClasses[0]?.id || "default").trim().toLowerCase();
             const rawDate = rec.date || rec.attendanceDate || rec.attendance_date || "";
             const dateStr = String(rawDate).split("T")[0].slice(0, 10);
@@ -2713,10 +2795,10 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
               });
             }
             const entry = aggregated.get(key)!;
-            const s = String(rec.status || "").trim().toLowerCase();
-            if (s === "late") entry.late++;
-            else if (s === "present" || s === "p" || rec.attended === true || rec.attended === "true") entry.present++;
-            else entry.absent++;
+            const status = getAttendanceStatus(rec);
+            if (status === "late") entry.late++;
+            else if (status === "present") entry.present++;
+            else if (status === "absent") entry.absent++;
           });
           const logs = Array.from(aggregated.values()).sort((a, b) => b.date.localeCompare(a.date));
           if (logs.length > 0) {
@@ -2830,45 +2912,21 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
         // The backend appends attendance updates, so the response may contain an older
         // absent record followed by a newer present record for the same student/date.
         // Always retain the newest record, just as the student calendar does.
-        const dateLevelMap = new Map<string, any>();
-        const getAttendanceRecordTime = (rec: any): number => {
-          for (const value of [rec?.updatedAt, rec?.createdAt, rec?.timestamp]) {
-            if (!value) continue;
-            const parsed = new Date(value).getTime();
-            if (!Number.isNaN(parsed) && parsed > 0) return parsed;
-          }
-          const objectId = String(rec?._id?.$oid || rec?._id || rec?.id || "").trim();
-          // Fall back to the MongoDB ObjectId timestamp (the first 4 bytes encode
-          // the creation time) so records without createdAt/updatedAt are still
-          // ordered newest-first. This is the same fallback the student attendance
-          // calendar uses, and it is why the student portal shows the latest
-          // records while this one did not.
-          if (/^[\da-f]{24}$/i.test(objectId)) {
-            return Number.parseInt(objectId.slice(0, 8), 16) * 1000;
-          }
-          return 0;
-        };
-        const recordStudentIds = (rec: any): string[] => [
-          rec?.studentID, rec?.student_id, rec?.studentId, rec?.reg_no,
-          rec?.rollNo, rec?.roll_no, rec?.user_id
-        ].filter(Boolean).map((value: any) => String(value).trim().toLowerCase());
-        // Track object id alongside the timestamp so two records with identical
-        // timestamps (both 0, e.g. no createdAt) still resolve deterministically:
-        // the record appearing later in the response is the newest append from
-        // the school backend and wins, matching the student calendar behavior.
-        let newestSequence = 0;
+        const dateLevelMap = new Map<string, { record: any; sequence: number }>();
+        // Track the response sequence as a final tie-breaker. The deployed
+        // School API returns raw attendance documents without createdAt, so a
+        // same-timestamp response must still be resolved deterministically.
         const setNewestAttendanceRecord = (rec: any) => {
-          const recordIds = recordStudentIds(rec);
-          const recordTime = getAttendanceRecordTime(rec);
-          const sequence = ++newestSequence;
+          const recordIds = getAttendanceRecordStudentIds(rec);
+          const sequence = responseSequence++;
           recordIds.forEach((sId: string) => {
             const previous = dateLevelMap.get(sId);
-            const previousTime = previous ? getAttendanceRecordTime(previous) : 0;
-            if (!previous || recordTime > previousTime || (recordTime === previousTime && sequence > newestSequence)) {
-              dateLevelMap.set(sId, rec);
+            if (!previous || isNewerAttendanceRecord(rec, sequence, previous.record, previous.sequence)) {
+              dateLevelMap.set(sId, { record: rec, sequence });
             }
           });
         };
+        let responseSequence = 0;
 
         try {
           const dateLookupRes = await fetchWithFallback("/class/attendance/lookup", {
@@ -2907,7 +2965,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
             for (const cand of candidateIds) {
               const match = dateLevelMap.get(cand.toLowerCase());
               if (match) {
-                foundRecord = match;
+                foundRecord = match.record;
                 break;
               }
             }
@@ -2931,39 +2989,18 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                   : (lookupResult?.records || lookupResult?.matches || lookupResult?.attendance || []);
                 const matchingRecords = Array.isArray(lookupList)
                   ? lookupList.filter((rec: any) => {
-                      const recordIds = recordStudentIds(rec);
+                      const recordIds = getAttendanceRecordStudentIds(rec);
                       return candidateIds.some(id => recordIds.includes(String(id).toLowerCase()));
                     })
                   : [];
-                // Keep the newest record by timestamp; when timestamps are equal
-                // (e.g. both 0 because the backend stores no createdAt), the record
-                // appearing later in the array is the newest appended one and wins.
-                foundRecord = matchingRecords.length > 0
-                  ? matchingRecords.reduce((latest: any, rec: any) => {
-                      const tRec = getAttendanceRecordTime(rec);
-                      const tLatest = latest ? getAttendanceRecordTime(latest) : 0;
-                      if (tRec > tLatest) return rec;
-                      if (tRec === tLatest) return rec;
-                      return latest;
-                    }, null)
-                  : null;
+                foundRecord = getLatestRecordFromList(matchingRecords);
               } catch (err) {
                 console.warn("Failed lookup for student", studentId, err);
               }
             }
 
             if (foundRecord) {
-              const stStr = String(foundRecord.status || foundRecord.presence || "").trim().toLowerCase();
-              const isLate = stStr === "late";
-              const isPresent = stStr === "present" || stStr === "p" || foundRecord.attended === true || foundRecord.attended === "true" || foundRecord.attended === 1 || foundRecord.attended === "1";
-              const isAbsent = stStr === "absent" || stStr === "a" || foundRecord.attended === false || foundRecord.attended === "false" || foundRecord.attended === 0 || foundRecord.attended === "0";
-              if (isLate) {
-                currentStatus = "late";
-              } else if (isPresent) {
-                currentStatus = "present";
-              } else if (isAbsent) {
-                currentStatus = "absent";
-              }
+              currentStatus = getAttendanceStatus(foundRecord);
             }
 
             return {
