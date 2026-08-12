@@ -363,33 +363,23 @@ export function StudentAttendanceCalendar({
     };
 
     const fetchSchoolBackendMonth = async () => {
-      const monthDays = new Date(selectedYear, selectedMonth + 1, 0).getDate();
-      const dates = Array.from({ length: monthDays }, (_, index) => (
-        `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}-${String(index + 1).padStart(2, "0")}`
-      ));
-
       const fetchForId = async (studentId: string) => {
-        const requests = dates.map(async date => {
-          try {
-            const response = await fetch(`${SCHOOL_BACKEND_URL}/class/attendance/lookup`, {
-              method: "POST",
-              headers: authHeaders,
-              body: JSON.stringify({ studentID: studentId, date }),
-              cache: "no-store"
-            });
-
-            if (!response.ok) return [];
-            const payload = await response.json().catch(() => []);
-            return Array.isArray(payload) ? payload : [];
-          } catch {
-            return [];
-          }
-        });
-
-        return (await Promise.all(requests)).flat();
+        try {
+          const response = await fetchWithFallback("/class/attendance/lookup", {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({ studentID: studentId }),
+            cache: "no-store"
+          });
+          const list = Array.isArray(response) ? response : (response?.records || response?.data || response?.matches || []);
+          return Array.isArray(list) ? list : [];
+        } catch {
+          return [];
+        }
       };
 
-      const allRecords = (await Promise.all(fetchTokens.map(id => fetchForId(id)))).flat();
+      const targets = fetchTokens.length > 0 ? fetchTokens.slice(0, 3) : [primaryStudentId];
+      const allRecords = (await Promise.all(targets.map(id => fetchForId(id)))).flat();
       allRecords.forEach((record: any) => applyRecord(record));
     };
 
