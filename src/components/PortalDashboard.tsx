@@ -2177,13 +2177,23 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
     const targetNotif = newNotificationsOpen !== undefined ? newNotificationsOpen : false;
     const targetReceipt = newFeeReceipt !== undefined ? newFeeReceipt : null;
 
-    if (
+    // Browsers keep window.history.state across a page reload, while React
+    // state always restarts on "home". Comparing against a stale history entry
+    // made tab buttons silently do nothing after a refresh, so always sync the
+    // React state and only skip the extra history push when it already matches.
+    const historyMatchesTarget =
       cur.activeTab === targetTab &&
       cur.homeTabSubSection === targetSub &&
       Boolean(cur.isProfileOpen) === targetProf &&
       Boolean(cur.isNotificationsOpen) === targetNotif &&
-      JSON.stringify(cur.selectedFeeReceipt) === JSON.stringify(targetReceipt)
-    ) {
+      JSON.stringify(cur.selectedFeeReceipt) === JSON.stringify(targetReceipt);
+
+    if (historyMatchesTarget) {
+      setActiveTab(targetTab);
+      setHomeTabSubSection(targetSub);
+      setIsProfileOpen(targetProf);
+      setIsNotificationsOpen(targetNotif);
+      setSelectedFeeReceipt(targetReceipt);
       return;
     }
 
@@ -2291,11 +2301,11 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
       timestamp: Date.now()
     };
 
-    if (!window.history.state || typeof window.history.state.activeTab === "undefined") {
-      try {
-        window.history.replaceState(rootState, "");
-      } catch (e) {}
-    }
+    // The dashboard always mounts on the home tab, so reset the persisted
+    // history entry (browsers restore it across reloads) to the root state.
+    try {
+      window.history.replaceState(rootState, "");
+    } catch (e) {}
 
     const handlePopState = (e: PopStateEvent) => {
       const state = e.state;
@@ -2449,6 +2459,9 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
   // Teacher Attendance states
   const [attendanceViewMode, setAttendanceViewMode] = useState<"mark" | "calendar">("mark");
   const [teacherClasses, setTeacherClasses] = useState<Array<{ id: string; name: string; code: string; organization_id: string; teacher_id: string }>>([]);
+  // Keeps the newest class list reachable from long-lived async closures
+  // (log polling), which would otherwise capture an empty array on mount.
+  const teacherClassesRef = useRef<Array<{ id: string; name: string; code: string; organization_id: string; teacher_id: string }>>([]);
   const [selectedTeacherClassId, setSelectedTeacherClassId] = useState("");
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split("T")[0]);
   const [isAttendanceSaved, setIsAttendanceSaved] = useState(false);
@@ -2702,6 +2715,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           };
         });
 
+        teacherClassesRef.current = mappedClasses;
         setTeacherClasses(mappedClasses);
         if (mappedClasses.length > 0) {
           setSelectedTeacherClassId(mappedClasses[0].id);
@@ -2724,13 +2738,25 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
     const token = user.token || "";
     const loadAttendanceLogs = async () => {
       try {
-        const localRes = await fetch(`/api/attendance/logs?teacherId=${encodeURIComponent(teacherId)}&organizationId=${encodeURIComponent(organizationId)}`);
-        if (localRes.ok) {
-          const logs = await localRes.json();
-          if (Array.isArray(logs) && logs.length > 0) {
-            setAttendanceLogs(logs);
-            return;
+        // Isolated try/catch: on the APK build (and whenever the portal is not
+        // served by the Hero-atlas node server) this request either fails or
+        // returns the SPA HTML shell. Parsing that used to throw and skip the
+        // school-backend fallback entirely, leaving the registry list empty.
+        try {
+          const localRes = await fetch(`/api/attendance/logs?teacherId=${encodeURIComponent(teacherId)}&organizationId=${encodeURIComponent(organizationId)}`);
+          if (localRes.ok) {
+            const contentType = localRes.headers.get("content-type") || "";
+            const text = await localRes.text();
+            if (contentType.includes("json") && text && !text.trim().startsWith("<")) {
+              const logs = JSON.parse(text);
+              if (Array.isArray(logs) && logs.length > 0) {
+                setAttendanceLogs(logs);
+                return;
+              }
+            }
           }
+        } catch (localErr) {
+          console.warn("[Attendance Logs] Local endpoint unavailable:", localErr);
         }
         // Local endpoint unavailable or empty: aggregate the newest records
         // per class/date directly from the school backend so the teacher sees
@@ -2761,7 +2787,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           };
           const allRecords = (await Promise.all(recentDates.map(lookupForDate))).flat();
           const classNames = new Map<string, string>();
-          teacherClasses.forEach(c => classNames.set(String(c.id || "").trim().toLowerCase(), c.name || "Class"));
+          teacherClassesRef.current.forEach(c => classNames.set(String(c.id || "").trim().toLowerCase(), c.name || "Class"));
 
           const latestByStudentDate = new Map<string, { record: any; sequence: number }>();
           allRecords.forEach((rec, sequence) => {
@@ -2769,7 +2795,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
             const dateStr = String(rawDate).split("T")[0].slice(0, 10);
             if (!dateStr) return;
             const studentId = getAttendanceRecordStudentIds(rec)[0] || String(rec._id || rec.id || "unknown");
-            const classId = String(rec.class_id || rec.classId || teacherClasses[0]?.id || "default").trim().toLowerCase();
+            const classId = String(rec.class_id || rec.classId || teacherClassesRef.current[0]?.id || "default").trim().toLowerCase();
             const key = `${classId}_${studentId}_${dateStr}`;
             const previous = latestByStudentDate.get(key);
             if (!previous || isNewerAttendanceRecord(rec, sequence, previous.record, previous.sequence)) {
@@ -2778,7 +2804,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
           });
 
           latestByStudentDate.forEach(({ record: rec }) => {
-            const classId = String(rec.class_id || rec.classId || teacherClasses[0]?.id || "default").trim().toLowerCase();
+            const classId = String(rec.class_id || rec.classId || teacherClassesRef.current[0]?.id || "default").trim().toLowerCase();
             const rawDate = rec.date || rec.attendanceDate || rec.attendance_date || "";
             const dateStr = String(rawDate).split("T")[0].slice(0, 10);
             if (!dateStr) return;
@@ -6363,6 +6389,11 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                   </div>
 
                   <div className="space-y-3">
+                    {attendanceLogs.length === 0 && (
+                      <div className="bg-slate-950/60 border border-slate-900/60 rounded-xl p-4 text-center text-[11px] text-slate-500">
+                        No attendance submissions found for the last 14 days.
+                      </div>
+                    )}
                     {attendanceLogs.map((log, idx) => (
                       <div key={`attlog-${log.id || log._id || 'log'}-${idx}`} className="bg-slate-950/60 border border-slate-900/60 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                         <div className="flex items-center gap-3">
