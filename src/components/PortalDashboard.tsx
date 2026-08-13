@@ -248,6 +248,31 @@ function isNewerAttendanceRecord(
   return candidateSequence > currentSequence;
 }
 
+// Normalizes any backend date shape (ISO string, Date, { $date }) to YYYY-MM-DD.
+function normalizeAttendanceDate(value: any): string {
+  if (!value) return "";
+  const raw = String(value?.$date || value?.iso || value);
+  const direct = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (direct) return direct[1];
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${parsed.getUTCFullYear()}-${pad(parsed.getUTCMonth() + 1)}-${pad(parsed.getUTCDate())}`;
+}
+
+// The school backend can return records outside the requested day, which used
+// to leak another day's status into the teacher registry. Records without any
+// usable date field are kept so older payload shapes still resolve.
+function attendanceRecordMatchesDate(record: any, dateStr: string): boolean {
+  if (!dateStr) return true;
+  const recordDate = normalizeAttendanceDate(
+    record?.date ?? record?.attendanceDate ?? record?.attendance_date ?? record?.day
+  );
+  if (!recordDate) return true;
+  return recordDate === normalizeAttendanceDate(dateStr);
+}
+
+
 function getLatestRecordFromList(res: any): any {
   if (!res) return null;
   const list = Array.isArray(res) ? res : (res.records || res.data || res.matches || res.attendance || []);
@@ -1208,6 +1233,7 @@ function DailyAttendanceInspector({
         };
         if (Array.isArray(list)) {
           list.forEach((rec: any) => {
+            if (!attendanceRecordMatchesDate(rec, inspectorDate)) return;
             const sId = String(rec.studentID || rec.student_id || rec.studentId || rec.reg_no || "").trim().toLowerCase();
             if (!sId) return;
             const previous = inspectorMap.get(sId);
@@ -1254,17 +1280,22 @@ function DailyAttendanceInspector({
                 }),
               }).catch(() => null);
 
-              foundRec = getLatestRecordFromList(lookupRes);
+              const lookupList = Array.isArray(lookupRes)
+                ? lookupRes
+                : (lookupRes?.records || lookupRes?.matches || lookupRes?.attendance || []);
+              const sameDay = Array.isArray(lookupList)
+                ? lookupList.filter((rec: any) => attendanceRecordMatchesDate(rec, inspectorDate))
+                : [];
+              foundRec = getLatestRecordFromList(sameDay);
             } catch (_) {}
           }
 
+          // Only a saved record for this exact date decides present/absent.
+          // Anything else stays "no_records" so the registry never shows a
+          // status the backend has not actually recorded for that day.
           if (foundRec) {
-            const recSt = String(foundRec.status || "").toLowerCase();
-            if (recSt === "late") status = "late";
-            else if (recSt === "present" || foundRec.attended === true || foundRec.attended === "true") status = "present";
-            else if (recSt === "absent" || foundRec.attended === false || foundRec.attended === "false") status = "absent";
-          } else if (st.status && (inspectorDate === attendanceDate || inspectorDate === new Date().toISOString().split("T")[0])) {
-            status = st.status;
+            const resolved = getAttendanceStatus(foundRec);
+            if (resolved) status = resolved;
           }
 
           return {
@@ -2968,7 +2999,9 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
           const list = Array.isArray(dateLookupRes) ? dateLookupRes : (dateLookupRes?.records || dateLookupRes?.matches || dateLookupRes?.attendance || []);
           if (Array.isArray(list)) {
-            list.forEach(setNewestAttendanceRecord);
+            list
+              .filter((rec: any) => attendanceRecordMatchesDate(rec, attendanceDate))
+              .forEach(setNewestAttendanceRecord);
           }
         } catch (_) {}
 
@@ -3015,6 +3048,7 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
                   : (lookupResult?.records || lookupResult?.matches || lookupResult?.attendance || []);
                 const matchingRecords = Array.isArray(lookupList)
                   ? lookupList.filter((rec: any) => {
+                      if (!attendanceRecordMatchesDate(rec, attendanceDate)) return false;
                       const recordIds = getAttendanceRecordStudentIds(rec);
                       return candidateIds.some(id => recordIds.includes(String(id).toLowerCase()));
                     })
@@ -6305,6 +6339,11 @@ export default function PortalDashboard({ user, onLogout, theme, onToggleTheme }
 
                             {/* Status Selectors Toggle Buttons Group */}
                             <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                              {!student.status && (
+                                <span className="px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wide bg-slate-900 border border-slate-800 text-slate-400">
+                                  No Record
+                                </span>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => handleUpdateStudentStatus(selectedTeacherClassId, student.id, "present")}
