@@ -78,6 +78,7 @@ export function TeacherAttendanceManager({
   const [searchQuery, setSearchQuery] = useState("");
   const [attendanceData, setAttendanceData] = useState<Map<string, StudentAttendance>>(new Map());
   const [classesWithStudents, setClassesWithStudents] = useState<ClassData[]>([]);
+  const [debugMode, setDebugMode] = useState(true);
 
   const months = [
     "January", "February", "March", "April", "May", "June",
@@ -88,10 +89,20 @@ export function TeacherAttendanceManager({
 
   const token_val = token || getStoredToken();
 
+  const log = (msg: string, data?: any) => {
+    if (debugMode) {
+      console.log(`[TeacherAttendance] ${msg}`, data || "");
+    }
+  };
+
   // Fetch students for each class
   const fetchStudentsForClasses = useCallback(async () => {
-    if (!teacherClasses || teacherClasses.length === 0) return;
+    if (!teacherClasses || teacherClasses.length === 0) {
+      log("No teacher classes provided");
+      return;
+    }
 
+    log(`Fetching students for ${teacherClasses.length} classes`);
     const classesData: ClassData[] = [];
 
     for (const cls of teacherClasses) {
@@ -99,10 +110,14 @@ export function TeacherAttendanceManager({
       const className = cls.name || cls.class_name || "Class";
       const classCode = cls.code || cls.class_code || classId;
 
-      if (!classId) continue;
+      if (!classId) {
+        log("Class missing ID:", cls);
+        continue;
+      }
 
       // Check if class already has students embedded
       if (cls.students && Array.isArray(cls.students) && cls.students.length > 0) {
+        log(`Class ${classId} has ${cls.students.length} embedded students`);
         classesData.push({
           id: classId,
           name: className,
@@ -119,6 +134,7 @@ export function TeacherAttendanceManager({
           ...(token_val && { "Authorization": `Bearer ${token_val}`, "x-access-token": token_val })
         };
 
+        log(`Fetching students for class ${classId}`);
         const response = await fetch(`${SCHOOL_BACKEND_URL}/class/students`, {
           method: "POST",
           headers: authHeaders,
@@ -128,6 +144,7 @@ export function TeacherAttendanceManager({
         if (response.ok) {
           const students = await response.json();
           if (Array.isArray(students) && students.length > 0) {
+            log(`Fetched ${students.length} students for class ${classId}`);
             classesData.push({
               id: classId,
               name: className,
@@ -135,6 +152,7 @@ export function TeacherAttendanceManager({
               students: students
             });
           } else {
+            log(`No students returned for class ${classId}`);
             classesData.push({
               id: classId,
               name: className,
@@ -143,6 +161,7 @@ export function TeacherAttendanceManager({
             });
           }
         } else {
+          log(`Failed to fetch students for class ${classId}:`, response.status);
           classesData.push({
             id: classId,
             name: className,
@@ -151,7 +170,7 @@ export function TeacherAttendanceManager({
           });
         }
       } catch (error) {
-        console.error(`Error fetching students for class ${classId}:`, error);
+        log(`Error fetching students for class ${classId}:`, error);
         classesData.push({
           id: classId,
           name: className,
@@ -161,8 +180,9 @@ export function TeacherAttendanceManager({
       }
     }
 
+    log(`Loaded ${classesData.length} classes with students`);
     setClassesWithStudents(classesData);
-  }, [teacherClasses, token_val]);
+  }, [teacherClasses, token_val, debugMode]);
 
   // Fetch students when component mounts or teacherClasses changes
   useEffect(() => {
@@ -181,6 +201,7 @@ export function TeacherAttendanceManager({
   // Fetch attendance data for all students in the selected class
   const fetchClassAttendance = useCallback(async () => {
     if (!selectedClassId || !selectedClass?.students || selectedClass.students.length === 0) {
+      log("Cannot fetch attendance: missing classId, selectedClass, or students");
       setAttendanceData(new Map());
       return;
     }
@@ -198,7 +219,11 @@ export function TeacherAttendanceManager({
         `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`
       );
 
-      console.log(`Fetching attendance for ${selectedClass.students.length} students for ${months[selectedMonth]} ${selectedYear}`);
+      log(`Fetching attendance for ${selectedClass.students.length} students for ${months[selectedMonth]} ${selectedYear}`);
+      log(`Total dates to check: ${datesInMonth.length}`);
+
+      let successCount = 0;
+      let failureCount = 0;
 
       // Fetch attendance for each student
       for (const student of selectedClass.students) {
@@ -207,7 +232,7 @@ export function TeacherAttendanceManager({
         const rollNo = student.rollNo || student.reg_no || student.nic || studentId;
 
         if (!studentId) {
-          console.warn("Student missing ID:", student);
+          log("Student missing ID:", student);
           continue;
         }
 
@@ -218,37 +243,92 @@ export function TeacherAttendanceManager({
         // Query attendance for each date
         for (const date of datesInMonth) {
           try {
-            const response = await fetch(`${SCHOOL_BACKEND_URL}/class/attendance/lookup`, {
-              method: "POST",
-              headers: authHeaders,
-              body: JSON.stringify({
-                studentID: studentId,
-                date: date
-              })
-            });
+            // Try multiple endpoint formats
+            let response;
+            let lastError;
 
-            if (response.ok) {
-              const records = await response.json();
-              if (Array.isArray(records) && records.length > 0) {
-                const latestRecord = records[records.length - 1];
-                const status = String(latestRecord.status || "").toLowerCase();
-                const attended = latestRecord.attended;
+            // Format 1: /class/attendance/lookup
+            try {
+              response = await fetch(`${SCHOOL_BACKEND_URL}/class/attendance/lookup`, {
+                method: "POST",
+                headers: authHeaders,
+                body: JSON.stringify({
+                  studentID: studentId,
+                  student_id: studentId,
+                  date: date,
+                  classID: selectedClassId,
+                  class_id: selectedClassId
+                })
+              });
+              if (response.ok) {
+                const records = await response.json();
+                if (Array.isArray(records) && records.length > 0) {
+                  const latestRecord = records[records.length - 1];
+                  const status = String(latestRecord.status || "").toLowerCase();
+                  const attended = latestRecord.attended;
 
-                if (status === "late" || attended === true || attended === "true" || attended === 1) {
-                  studentRecords[date] = "present";
-                  presentCount++;
-                } else if (status === "absent" || attended === false || attended === "false" || attended === 0) {
-                  studentRecords[date] = "absent";
-                  absentCount++;
-                } else {
-                  studentRecords[date] = "no_record";
+                  if (status === "late" || attended === true || attended === "true" || attended === 1) {
+                    studentRecords[date] = "present";
+                    presentCount++;
+                    successCount++;
+                  } else if (status === "absent" || attended === false || attended === "false" || attended === 0) {
+                    studentRecords[date] = "absent";
+                    absentCount++;
+                    successCount++;
+                  } else {
+                    studentRecords[date] = "no_record";
+                  }
+                  continue;
                 }
-              } else {
-                studentRecords[date] = "no_record";
+              }
+            } catch (e) {
+              lastError = e;
+            }
+
+            // Format 2: /attendance/student
+            if (!response?.ok) {
+              try {
+                response = await fetch(`${SCHOOL_BACKEND_URL}/attendance/student`, {
+                  method: "POST",
+                  headers: authHeaders,
+                  body: JSON.stringify({
+                    studentID: studentId,
+                    student_id: studentId,
+                    date: date
+                  })
+                });
+                if (response.ok) {
+                  const records = await response.json();
+                  if (Array.isArray(records) && records.length > 0) {
+                    const latestRecord = records[records.length - 1];
+                    const status = String(latestRecord.status || "").toLowerCase();
+                    const attended = latestRecord.attended;
+
+                    if (status === "late" || attended === true || attended === "true" || attended === 1) {
+                      studentRecords[date] = "present";
+                      presentCount++;
+                      successCount++;
+                    } else if (status === "absent" || attended === false || attended === "false" || attended === 0) {
+                      studentRecords[date] = "absent";
+                      absentCount++;
+                      successCount++;
+                    } else {
+                      studentRecords[date] = "no_record";
+                    }
+                    continue;
+                  }
+                }
+              } catch (e) {
+                lastError = e;
               }
             }
+
+            // If both failed
+            studentRecords[date] = "no_record";
+            failureCount++;
           } catch (error) {
             studentRecords[date] = "no_record";
+            failureCount++;
           }
         }
 
@@ -267,15 +347,15 @@ export function TeacherAttendanceManager({
         });
       }
 
-      console.log(`Loaded attendance for ${newAttendanceMap.size} students`);
+      log(`✅ Attendance fetch complete: ${successCount} records found, ${failureCount} failures`);
       setAttendanceData(newAttendanceMap);
     } catch (error) {
-      console.error("Error fetching attendance:", error);
+      log("❌ Error fetching attendance:", error);
       setAttendanceData(new Map());
     } finally {
       setLoading(false);
     }
-  }, [selectedClassId, selectedClass, selectedMonth, selectedYear, token_val, months]);
+  }, [selectedClassId, selectedClass, selectedMonth, selectedYear, token_val, months, debugMode]);
 
   useEffect(() => {
     fetchClassAttendance();
@@ -337,6 +417,16 @@ export function TeacherAttendanceManager({
 
   return (
     <div className="space-y-6">
+      {/* Debug Toggle */}
+      <div className="text-right">
+        <button
+          onClick={() => setDebugMode(!debugMode)}
+          className="text-xs px-2 py-1 bg-slate-800 text-slate-400 rounded hover:bg-slate-700"
+        >
+          {debugMode ? "Debug: ON 🔍" : "Debug: OFF"}
+        </button>
+      </div>
+
       {/* Header */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 backdrop-blur-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
