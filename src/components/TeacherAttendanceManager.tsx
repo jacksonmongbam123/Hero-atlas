@@ -198,6 +198,19 @@ export function TeacherAttendanceManager({
 
   const selectedClass = classesWithStudents.find(c => c.id === selectedClassId);
 
+  // Helper function to format date for query - try multiple formats
+  const formatDateForQuery = (year: number, month: number, day: number): string[] => {
+    // Format: YYYY-MM-DD
+    const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    
+    // Also try ISO format at midnight
+    const isoDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+    const iso8601 = isoDate.toISOString();
+    
+    // Return multiple formats to try
+    return [dateStr, iso8601];
+  };
+
   // Fetch attendance data for all students in the selected class
   const fetchClassAttendance = useCallback(async () => {
     if (!selectedClassId || !selectedClass?.students || selectedClass.students.length === 0) {
@@ -215,15 +228,14 @@ export function TeacherAttendanceManager({
 
       const newAttendanceMap = new Map<string, StudentAttendance>();
       const monthDays = new Date(selectedYear, selectedMonth + 1, 0).getDate();
-      const datesInMonth = Array.from({ length: monthDays }, (_, i) =>
-        `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`
-      );
+      const datesInMonth = Array.from({ length: monthDays }, (_, i) => i + 1);
 
-      log(`Fetching attendance for ${selectedClass.students.length} students for ${months[selectedMonth]} ${selectedYear}`);
-      log(`Total dates to check: ${datesInMonth.length}`);
+      log(`🔍 Fetching attendance for ${selectedClass.students.length} students for ${months[selectedMonth]} ${selectedYear}`);
+      log(`📅 Total days to check: ${datesInMonth.length}`);
 
       let successCount = 0;
       let failureCount = 0;
+      let noRecordCount = 0;
 
       // Fetch attendance for each student
       for (const student of selectedClass.students) {
@@ -232,7 +244,7 @@ export function TeacherAttendanceManager({
         const rollNo = student.rollNo || student.reg_no || student.nic || studentId;
 
         if (!studentId) {
-          log("Student missing ID:", student);
+          log("⚠️ Student missing ID:", student);
           continue;
         }
 
@@ -241,58 +253,75 @@ export function TeacherAttendanceManager({
         let absentCount = 0;
 
         // Query attendance for each date
-        for (const dateStr of datesInMonth) {
-          try {
-            // Create Date object at midnight UTC for consistency
-            const [year, month, day] = dateStr.split("-").map(Number);
-            const dateObj = new Date(Date.UTC(year, month - 1, day));
+        for (const day of datesInMonth) {
+          const dateFormats = formatDateForQuery(selectedYear, selectedMonth + 1, day);
+          const dateDisplayStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          
+          let found = false;
 
-            if (debugMode && successCount + failureCount === 0) {
-              log(`📅 Querying with date format: ${dateObj.toISOString()} from string: ${dateStr}`);
-            }
+          // Try each date format
+          for (const dateFormat of dateFormats) {
+            if (found) break;
 
-            const response = await fetch(`${SCHOOL_BACKEND_URL}/attendance/lookup`, {
-              method: "POST",
-              headers: authHeaders,
-              body: JSON.stringify({
-                studentID: studentId,
-                date: dateObj.toISOString() // Send ISO format date string
-              })
-            });
+            try {
+              log(`📤 Querying: studentID=${studentId}, date=${dateFormat}`);
 
-            if (response.ok) {
-              const records = await response.json();
-              if (Array.isArray(records) && records.length > 0) {
-                const latestRecord = records[records.length - 1];
-                const status = String(latestRecord.status || "").toLowerCase();
-                const attended = latestRecord.attended;
+              const response = await fetch(`${SCHOOL_BACKEND_URL}/attendance/lookup`, {
+                method: "POST",
+                headers: authHeaders,
+                body: JSON.stringify({
+                  studentID: studentId,
+                  date: dateFormat
+                })
+              });
 
-                if (status === "late" || attended === true || attended === "true" || attended === 1) {
-                  studentRecords[dateStr] = "present";
-                  presentCount++;
-                  successCount++;
-                } else if (status === "absent" || attended === false || attended === "false" || attended === 0) {
-                  studentRecords[dateStr] = "absent";
-                  absentCount++;
-                  successCount++;
+              if (response.ok) {
+                const records = await response.json();
+                log(`📥 Response for ${studentId} on ${dateFormat}:`, records);
+
+                if (Array.isArray(records) && records.length > 0) {
+                  const latestRecord = records[records.length - 1];
+                  const status = String(latestRecord.status || "").toLowerCase();
+                  const attended = latestRecord.attended;
+
+                  log(`✅ Found record: attended=${attended}, status=${status}`);
+
+                  if (attended === true || attended === 1 || attended === "true" || attended === "1" || status === "present" || status === "late") {
+                    studentRecords[dateDisplayStr] = "present";
+                    presentCount++;
+                    successCount++;
+                  } else if (attended === false || attended === 0 || attended === "false" || attended === "0" || status === "absent") {
+                    studentRecords[dateDisplayStr] = "absent";
+                    absentCount++;
+                    successCount++;
+                  } else {
+                    studentRecords[dateDisplayStr] = "no_record";
+                    noRecordCount++;
+                  }
+                  found = true;
                 } else {
-                  studentRecords[dateStr] = "no_record";
+                  log(`❌ No records returned for ${studentId} on ${dateFormat}`);
                 }
               } else {
-                studentRecords[dateStr] = "no_record";
+                log(`❌ HTTP ${response.status} for ${studentId} on ${dateFormat}`);
               }
-            } else {
-              studentRecords[dateStr] = "no_record";
-              failureCount++;
+            } catch (error) {
+              log(`❌ Error querying ${dateFormat}:`, error);
             }
-          } catch (error) {
-            studentRecords[dateStr] = "no_record";
+          }
+
+          // If no date format worked, mark as no_record
+          if (!found) {
+            studentRecords[dateDisplayStr] = "no_record";
+            noRecordCount++;
             failureCount++;
           }
         }
 
         const totalDays = presentCount + absentCount;
-        const percentage = totalDays > 0 ? ((presentCount / totalDays) * 100).toFixed(1) : "N/A";
+        const percentage = totalDays > 0 ? ((presentCount / totalDays) * 100).toFixed(1) : "0.0";
+
+        log(`📊 ${studentName}: ${presentCount} present, ${absentCount} absent, ${totalDays} total`);
 
         newAttendanceMap.set(studentId, {
           studentId,
@@ -306,10 +335,10 @@ export function TeacherAttendanceManager({
         });
       }
 
-      log(`✅ Attendance fetch complete: ${successCount} records found, ${failureCount} failures`);
+      log(`✅ COMPLETE: ${successCount} found, ${noRecordCount} no records, ${failureCount} failures`);
       setAttendanceData(newAttendanceMap);
     } catch (error) {
-      log("❌ Error fetching attendance:", error);
+      log("💥 Fatal error:", error);
       setAttendanceData(new Map());
     } finally {
       setLoading(false);
