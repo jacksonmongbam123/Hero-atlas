@@ -241,93 +241,52 @@ export function TeacherAttendanceManager({
         let absentCount = 0;
 
         // Query attendance for each date
-        for (const date of datesInMonth) {
+        for (const dateStr of datesInMonth) {
           try {
-            // Try multiple endpoint formats
-            let response;
-            let lastError;
+            // Create Date object at midnight UTC for consistency
+            const [year, month, day] = dateStr.split("-").map(Number);
+            const dateObj = new Date(Date.UTC(year, month - 1, day));
 
-            // Format 1: /class/attendance/lookup
-            try {
-              response = await fetch(`${SCHOOL_BACKEND_URL}/class/attendance/lookup`, {
-                method: "POST",
-                headers: authHeaders,
-                body: JSON.stringify({
-                  studentID: studentId,
-                  student_id: studentId,
-                  date: date,
-                  classID: selectedClassId,
-                  class_id: selectedClassId
-                })
-              });
-              if (response.ok) {
-                const records = await response.json();
-                if (Array.isArray(records) && records.length > 0) {
-                  const latestRecord = records[records.length - 1];
-                  const status = String(latestRecord.status || "").toLowerCase();
-                  const attended = latestRecord.attended;
-
-                  if (status === "late" || attended === true || attended === "true" || attended === 1) {
-                    studentRecords[date] = "present";
-                    presentCount++;
-                    successCount++;
-                  } else if (status === "absent" || attended === false || attended === "false" || attended === 0) {
-                    studentRecords[date] = "absent";
-                    absentCount++;
-                    successCount++;
-                  } else {
-                    studentRecords[date] = "no_record";
-                  }
-                  continue;
-                }
-              }
-            } catch (e) {
-              lastError = e;
+            if (debugMode && successCount + failureCount === 0) {
+              log(`📅 Querying with date format: ${dateObj.toISOString()} from string: ${dateStr}`);
             }
 
-            // Format 2: /attendance/student
-            if (!response?.ok) {
-              try {
-                response = await fetch(`${SCHOOL_BACKEND_URL}/attendance/student`, {
-                  method: "POST",
-                  headers: authHeaders,
-                  body: JSON.stringify({
-                    studentID: studentId,
-                    student_id: studentId,
-                    date: date
-                  })
-                });
-                if (response.ok) {
-                  const records = await response.json();
-                  if (Array.isArray(records) && records.length > 0) {
-                    const latestRecord = records[records.length - 1];
-                    const status = String(latestRecord.status || "").toLowerCase();
-                    const attended = latestRecord.attended;
+            const response = await fetch(`${SCHOOL_BACKEND_URL}/attendance/lookup`, {
+              method: "POST",
+              headers: authHeaders,
+              body: JSON.stringify({
+                studentID: studentId,
+                date: dateObj.toISOString() // Send ISO format date string
+              })
+            });
 
-                    if (status === "late" || attended === true || attended === "true" || attended === 1) {
-                      studentRecords[date] = "present";
-                      presentCount++;
-                      successCount++;
-                    } else if (status === "absent" || attended === false || attended === "false" || attended === 0) {
-                      studentRecords[date] = "absent";
-                      absentCount++;
-                      successCount++;
-                    } else {
-                      studentRecords[date] = "no_record";
-                    }
-                    continue;
-                  }
+            if (response.ok) {
+              const records = await response.json();
+              if (Array.isArray(records) && records.length > 0) {
+                const latestRecord = records[records.length - 1];
+                const status = String(latestRecord.status || "").toLowerCase();
+                const attended = latestRecord.attended;
+
+                if (status === "late" || attended === true || attended === "true" || attended === 1) {
+                  studentRecords[dateStr] = "present";
+                  presentCount++;
+                  successCount++;
+                } else if (status === "absent" || attended === false || attended === "false" || attended === 0) {
+                  studentRecords[dateStr] = "absent";
+                  absentCount++;
+                  successCount++;
+                } else {
+                  studentRecords[dateStr] = "no_record";
                 }
-              } catch (e) {
-                lastError = e;
+              } else {
+                studentRecords[dateStr] = "no_record";
               }
+            } else {
+              studentRecords[dateStr] = "no_record";
+              failureCount++;
             }
-
-            // If both failed
-            studentRecords[date] = "no_record";
-            failureCount++;
           } catch (error) {
-            studentRecords[date] = "no_record";
+            studentRecords[dateStr] = "no_record";
             failureCount++;
           }
         }
