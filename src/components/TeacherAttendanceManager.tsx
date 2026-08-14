@@ -53,6 +53,13 @@ interface StudentAttendance {
   records: Record<string, "present" | "absent" | "late" | "no_record">;
 }
 
+interface ClassData {
+  id: string;
+  name: string;
+  code?: string;
+  students: Student[];
+}
+
 export function TeacherAttendanceManager({
   user,
   teacherClasses = [],
@@ -70,6 +77,7 @@ export function TeacherAttendanceManager({
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [attendanceData, setAttendanceData] = useState<Map<string, StudentAttendance>>(new Map());
+  const [classesWithStudents, setClassesWithStudents] = useState<ClassData[]>([]);
 
   const months = [
     "January", "February", "March", "April", "May", "June",
@@ -78,31 +86,107 @@ export function TeacherAttendanceManager({
 
   const years = Array.from({ length: 8 }, (_, i) => 2023 + i);
 
-  // Get available classes
-  const availableClasses = useMemo(() => {
-    return teacherClasses.map(cls => ({
-      id: String(cls._id || cls.id),
-      name: cls.name || cls.class_name || "Class",
-      students: cls.students || []
-    }));
-  }, [teacherClasses]);
+  const token_val = token || getStoredToken();
+
+  // Fetch students for each class
+  const fetchStudentsForClasses = useCallback(async () => {
+    if (!teacherClasses || teacherClasses.length === 0) return;
+
+    const classesData: ClassData[] = [];
+
+    for (const cls of teacherClasses) {
+      const classId = String(cls._id || cls.id || cls.class_id || "");
+      const className = cls.name || cls.class_name || "Class";
+      const classCode = cls.code || cls.class_code || classId;
+
+      if (!classId) continue;
+
+      // Check if class already has students embedded
+      if (cls.students && Array.isArray(cls.students) && cls.students.length > 0) {
+        classesData.push({
+          id: classId,
+          name: className,
+          code: classCode,
+          students: cls.students
+        });
+        continue;
+      }
+
+      // Try to fetch students from backend
+      try {
+        const authHeaders = {
+          "Content-Type": "application/json",
+          ...(token_val && { "Authorization": `Bearer ${token_val}`, "x-access-token": token_val })
+        };
+
+        const response = await fetch(`${SCHOOL_BACKEND_URL}/class/students`, {
+          method: "POST",
+          headers: authHeaders,
+          body: JSON.stringify({ classID: classId, class_id: classId })
+        });
+
+        if (response.ok) {
+          const students = await response.json();
+          if (Array.isArray(students) && students.length > 0) {
+            classesData.push({
+              id: classId,
+              name: className,
+              code: classCode,
+              students: students
+            });
+          } else {
+            classesData.push({
+              id: classId,
+              name: className,
+              code: classCode,
+              students: []
+            });
+          }
+        } else {
+          classesData.push({
+            id: classId,
+            name: className,
+            code: classCode,
+            students: []
+          });
+        }
+      } catch (error) {
+        console.error(`Error fetching students for class ${classId}:`, error);
+        classesData.push({
+          id: classId,
+          name: className,
+          code: classCode,
+          students: []
+        });
+      }
+    }
+
+    setClassesWithStudents(classesData);
+  }, [teacherClasses, token_val]);
+
+  // Fetch students when component mounts or teacherClasses changes
+  useEffect(() => {
+    fetchStudentsForClasses();
+  }, [fetchStudentsForClasses]);
 
   // Set default class on mount
   useEffect(() => {
-    if (availableClasses.length > 0 && !selectedClassId) {
-      setSelectedClassId(availableClasses[0].id);
+    if (classesWithStudents.length > 0 && !selectedClassId) {
+      setSelectedClassId(classesWithStudents[0].id);
     }
-  }, [availableClasses, selectedClassId]);
+  }, [classesWithStudents, selectedClassId]);
 
-  const selectedClass = availableClasses.find(c => c.id === selectedClassId);
+  const selectedClass = classesWithStudents.find(c => c.id === selectedClassId);
 
   // Fetch attendance data for all students in the selected class
   const fetchClassAttendance = useCallback(async () => {
-    if (!selectedClassId || !selectedClass?.students) return;
+    if (!selectedClassId || !selectedClass?.students || selectedClass.students.length === 0) {
+      setAttendanceData(new Map());
+      return;
+    }
 
     setLoading(true);
     try {
-      const token_val = token || getStoredToken();
       const authHeaders = {
         "Content-Type": "application/json",
         ...(token_val && { "Authorization": `Bearer ${token_val}`, "x-access-token": token_val })
@@ -114,13 +198,18 @@ export function TeacherAttendanceManager({
         `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`
       );
 
+      console.log(`Fetching attendance for ${selectedClass.students.length} students for ${months[selectedMonth]} ${selectedYear}`);
+
       // Fetch attendance for each student
       for (const student of selectedClass.students) {
         const studentId = String(student._id || student.id || student.studentID || student.student_id || "");
         const studentName = student.name || student.full_name || "Student";
         const rollNo = student.rollNo || student.reg_no || student.nic || studentId;
 
-        if (!studentId) continue;
+        if (!studentId) {
+          console.warn("Student missing ID:", student);
+          continue;
+        }
 
         const studentRecords: Record<string, "present" | "absent" | "late" | "no_record"> = {};
         let presentCount = 0;
@@ -178,13 +267,15 @@ export function TeacherAttendanceManager({
         });
       }
 
+      console.log(`Loaded attendance for ${newAttendanceMap.size} students`);
       setAttendanceData(newAttendanceMap);
     } catch (error) {
       console.error("Error fetching attendance:", error);
+      setAttendanceData(new Map());
     } finally {
       setLoading(false);
     }
-  }, [selectedClassId, selectedClass, selectedMonth, selectedYear, token]);
+  }, [selectedClassId, selectedClass, selectedMonth, selectedYear, token_val, months]);
 
   useEffect(() => {
     fetchClassAttendance();
@@ -235,6 +326,15 @@ export function TeacherAttendanceManager({
     return { totalPresent, totalAbsent, total, percentage };
   }, [attendanceData]);
 
+  if (classesWithStudents.length === 0) {
+    return (
+      <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-12 text-center">
+        <Users className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+        <p className="text-slate-400">No classes assigned to this teacher.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -248,20 +348,21 @@ export function TeacherAttendanceManager({
               Manage and monitor attendance for <span className="text-slate-200 font-medium">
                 {selectedClass?.name || "Select a class"}
               </span>
+              {selectedClass && ` (${selectedClass.students.length} students)`}
             </p>
           </div>
 
           {/* Controls */}
           <div className="flex flex-col items-start sm:items-end gap-3">
             {/* Class Selection */}
-            {availableClasses.length > 0 && (
+            {classesWithStudents.length > 0 && (
               <select
                 value={selectedClassId}
                 onChange={(e) => setSelectedClassId(e.target.value)}
                 className="bg-slate-800/80 border border-slate-700/60 text-slate-200 text-xs font-semibold rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500 cursor-pointer"
               >
-                {availableClasses.map(cls => (
-                  <option key={cls.id} value={cls.id}>{cls.name}</option>
+                {classesWithStudents.map(cls => (
+                  <option key={cls.id} value={cls.id}>{cls.name} ({cls.students.length})</option>
                 ))}
               </select>
             )}
@@ -406,11 +507,18 @@ export function TeacherAttendanceManager({
               <p className="text-sm text-slate-400">Loading attendance data...</p>
             </div>
           </div>
+        ) : selectedClass && selectedClass.students.length === 0 ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center space-y-3">
+              <Users className="w-8 h-8 text-slate-600 mx-auto" />
+              <p className="text-sm text-slate-400">No students in this class.</p>
+            </div>
+          </div>
         ) : filteredStudents.length === 0 ? (
           <div className="flex items-center justify-center py-12">
             <div className="text-center space-y-3">
               <Users className="w-8 h-8 text-slate-600 mx-auto" />
-              <p className="text-sm text-slate-400">No students found for this class.</p>
+              <p className="text-sm text-slate-400">No students match your search.</p>
             </div>
           </div>
         ) : (
